@@ -1,0 +1,81 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-background text-zinc-100 min-h-screen antialiased selection:bg-primary/30 selection:text-primary-light;
+  }
+}
+
+/* Modern Minimalist Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #051214;
+}
+::-webkit-scrollbar-thumb {
+  background: #0d2d31;
+  border-radius: 10px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #184f56;
+}
+
+/* Glassmorphism Cards */
+.glass-card {
+  background: rgba(13, 38, 41, 0.7);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.glass-card-hover {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.glass-card-hover:hover {
+  background: rgba(13, 38, 41, 0.85);
+  border-color: rgba(166, 40, 40, 0.35);
+  box-shadow: 0 12px 40px -12px rgba(166, 40, 40, 0.2);
+  transform: translateY(-2px);
+}
+
+/* Text Gradients */
+.text-glow-gradient {
+  background: linear-gradient(135deg, #a62828 0%, #b83c32 50%, #427175 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.text-gradient-cyan-purple {
+  background: linear-gradient(135deg, #427175 0%, #a62828 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+/* Grid background for Hero sections */
+.bg-grid-pattern {
+  background-size: 40px 40px;
+  background-image: 
+    linear-gradient(to right, rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+}
+
+/* Shimmer/Skeleton Animation */
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.skeleton-shimmer {
+  background: linear-gradient(90deg, #18181B 25%, #27272A 50%, #18181B 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite linear;
+}

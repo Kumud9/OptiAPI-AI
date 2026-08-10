@@ -1,0 +1,78 @@
+version: '3.8'
+
+services:
+  mongodb:
+    image: mongo:6.0
+    container_name: optiapi_mongodb
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+    networks:
+      - optiapi_network
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 5s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+
+  redis:
+    image: redis:7.0-alpine
+    container_name: optiapi_redis
+    ports:
+      - "6379:6379"
+    networks:
+      - optiapi_network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+
+  rabbitmq:
+    image: rabbitmq:3.11-management-alpine
+    container_name: optiapi_rabbitmq
+    ports:
+      - "5672:5672"
+      - "15672:15672" # RabbitMQ Management dashboard
+    networks:
+      - optiapi_network
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: optiapi_backend
+    ports:
+      - "5000:5000"
+    environment:
+      - PORT=5000
+      - MONGODB_URI=mongodb://mongodb:27017/optiapi
+      - REDIS_URL=redis://redis:6379
+      - RABBITMQ_URL=amqp://rabbitmq:5672
+      - JWT_SECRET=optiapi_secret_key_for_jwt_tokens_2026_secure
+      - NODE_ENV=production
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - optiapi_network
+
+volumes:
+  mongodb_data:
+
+networks:
+  optiapi_network:
+    driver: bridge

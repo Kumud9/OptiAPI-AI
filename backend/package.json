@@ -1,0 +1,29 @@
+{
+  "name": "optiapi-backend",
+  "version": "1.0.0",
+  "description": "OptiAPI AI Backend - Cost Intelligence & Optimization Gateway",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "nodemon src/server.js",
+    "seed": "node src/seed.js",
+    "test": "node --test src/utils/pathNormalizer.test.js src/utils/crypto.test.js src/tests/gatewayCache.test.js src/tests/rateLimiter.test.js src/tests/providerKey.test.js src/tests/validation.test.js"
+  },
+  "dependencies": {
+    "amqplib": "^0.10.4",
+    "bcryptjs": "^2.4.3",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "jsonwebtoken": "^9.0.2",
+    "mongoose": "^8.2.1",
+    "morgan": "^1.10.0",
+    "multer": "^1.4.5-lts.1",
+    "redis": "^4.6.13",
+    "winston": "^3.12.0",
+    "zod": "^3.22.4"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.0"
+  }
+}
