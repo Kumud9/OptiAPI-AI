@@ -1,6 +1,8 @@
 const RequestLog = require('../models/RequestLog');
 const Recommendation = require('../models/Recommendation');
+const { getRedisClient } = require('../config/redis');
 const logger = require('../utils/logger');
+
 
 /**
  * Dashboard & Analytics Data Aggregator
@@ -24,7 +26,6 @@ const getDashboardStats = async (req, res) => {
       cacheStats,
       latencyStats,
       failedStats,
-      rateLimitStats,
       providers,
       recommendations
     ] = await Promise.all([
@@ -58,15 +59,20 @@ const getDashboardStats = async (req, res) => {
       // Failed request counts (status not 200 or 202)
       RequestLog.countDocuments({ userId, status: { $nin: [200, 202] } }),
 
-      // Rate limit violations (status 429)
-      RequestLog.countDocuments({ userId, status: 429 }),
-
       // Active unique providers
       RequestLog.distinct('provider', { userId }),
 
       // Recommendations for savings calculation
       Recommendation.find({ userId, isApplied: false })
     ]);
+
+    // Rate-limit violations: read from the Redis counter incremented by rateLimiter.js.
+    // RequestLog is never written for 429s (rate limiter fires before handleGatewayRequest),
+    // so this must come from Redis, not MongoDB.
+    const redis = getRedisClient();
+    const rlViolationRaw = await redis.get(`rl_violations:${userId}`);
+    const rateLimitStats = rlViolationRaw ? parseInt(rlViolationRaw, 10) : 0;
+
 
     // 3. Extract aggregated values
     const totalCost = costStats[0] ? costStats[0].total : 0.0;

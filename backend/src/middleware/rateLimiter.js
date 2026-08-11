@@ -33,11 +33,19 @@ const gatewayRateLimiter = async (req, res, next) => {
   try {
     const currentCount = await redis.eval(rateLimitScript, {
       keys: [cacheKey],
-      args: [String(rpsLimit), '2']
+      arguments: [String(rpsLimit), '2']
     });
 
     if (currentCount > rpsLimit) {
       logger.warn(`Rate Limit Exceeded for Key: ${apiKeyString.substring(0, 10)}... [Active RPS: ${currentCount - 1}/${rpsLimit}]`);
+
+      // Increment per-user violation counter in Redis so analytics can surface it.
+      // Fire-and-forget: errors must never block or alter the 429 response.
+      const userId = req.gatewayKey.userId;
+      redis.incr(`rl_violations:${userId}`).catch((err) =>
+        logger.error(`Failed to increment rate-limit violation counter: ${err.message}`)
+      );
+
       return res.status(429).json({
         success: false,
         error: 'Rate limit violation - too many requests',

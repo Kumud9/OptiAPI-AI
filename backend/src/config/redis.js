@@ -36,6 +36,13 @@ class MockRedisClient {
     return Promise.resolve(deleted ? 1 : 0);
   }
 
+  async incr(key) {
+    const current = parseInt(this.store.get(key) || '0', 10);
+    const next = current + 1;
+    this.store.set(key, String(next));
+    return Promise.resolve(next);
+  }
+
   async quit() {
     return Promise.resolve();
   }
