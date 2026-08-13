@@ -129,6 +129,7 @@ const AdminDashboard = () => {
                   <Tooltip
                     contentStyle={{ backgroundColor: '#09090B', borderColor: '#27272A', borderRadius: '10px' }}
                     labelStyle={{ fontSize: '10px', color: '#A1A1AA', fontWeight: 'bold' }}
+                    itemStyle={{ color: '#E4E4E7', fontSize: '10px' }}
                   />
                   <Bar dataKey="Registrations" fill="#3B82F6" radius={[4, 4, 0, 0]} />
                 </BarChart>

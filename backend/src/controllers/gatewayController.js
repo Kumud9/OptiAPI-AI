@@ -17,16 +17,59 @@ const handleGatewayRequest = async (req, res) => {
   const apiKeyId = req.gatewayKey ? req.gatewayKey._id : null;
   const startTime = Date.now();
 
+  // Optimization logic integration
+  const optimizationEnabled = process.env.OPTIMIZATION_ENABLED === 'true';
+  let selectedProvider = provider;
+  let selectedModel = null;
+  let routingEndpoint = endpoint;
+  let optimizationUsed = false;
+  
+  req.query = req.query || {};
+  req.headers = req.headers || {};
+  const mode = req.query.mode || req.headers['x-optiapi-mode'] || 'balanced';
+
+  if (optimizationEnabled && (provider === 'openai' || provider === 'gemini')) {
+    try {
+      const { getOptimizationDecision } = require('../services/optimizationDecisionService');
+      const decisionResult = await getOptimizationDecision(userId, mode, [provider]);
+      if (decisionResult && decisionResult.success && decisionResult.decision) {
+        const { provider: recProvider, model: recModel } = decisionResult.decision;
+        if (recProvider === provider && recModel) {
+          selectedModel = recModel;
+          optimizationUsed = true;
+          
+          if (provider === 'openai') {
+            req.body = req.body || {};
+            req.body.model = selectedModel;
+          } else if (provider === 'gemini') {
+            routingEndpoint = endpoint.replace(/\/models\/([^/:]+)/, `/models/${selectedModel}`);
+          }
+          logger.info(`Optimization active: routed request to model [${selectedModel}] for provider [${provider.toUpperCase()}]`);
+        }
+      }
+    } catch (err) {
+      logger.error(`Optimization decision engine failed, falling back to default routing: ${err.message}`);
+    }
+  }
+
+  // Attach internally readable request lifecycle optimization metadata
+  req.optimization = {
+    optimizationEnabled,
+    optimizationSelectedProvider: selectedProvider,
+    optimizationSelectedModel: selectedModel,
+    optimizationMode: mode,
+    optimizationUsed
+  };
+
   // 1. Heavy Traffic Queueing simulation trigger
-  // Triggered when client appends ?queue=true query parameter, simulates async deferral
   if (req.query.queue === 'true' || headers['x-optiapi-queue'] === 'true') {
     const queuePayload = {
       userId,
       apiKeyId,
-      provider,
-      endpoint,
+      provider: selectedProvider,
+      endpoint: routingEndpoint,
       method,
-      body,
+      body: req.body,
       timestamp: Date.now()
     };
 
@@ -50,14 +93,13 @@ const handleGatewayRequest = async (req, res) => {
   while (attempts < maxAttempts && !requestSucceeded) {
     try {
       attempts++;
-      apiResponse = await simulateApiCall(provider, endpoint, method, body, headers, userId);
+      apiResponse = await simulateApiCall(selectedProvider, routingEndpoint, method, req.body, headers, userId);
       requestSucceeded = true;
     } catch (err) {
       errorDetail = err.message;
-      logger.warn(`Gateway router attempt ${attempts}/${maxAttempts} failed for provider [${provider.toUpperCase()}] ${endpoint}: ${errorDetail}`);
+      logger.warn(`Gateway router attempt ${attempts}/${maxAttempts} failed for provider [${selectedProvider.toUpperCase()}] ${routingEndpoint}: ${errorDetail}`);
       
       if (attempts < maxAttempts) {
-        // Backoff delay: 200ms, 400ms
         const delay = Math.pow(2, attempts) * 100;
         await new Promise(resolve => setTimeout(resolve, delay));
       }
@@ -69,25 +111,25 @@ const handleGatewayRequest = async (req, res) => {
   // 3. Request Success Handling
   if (requestSucceeded && apiResponse) {
     const { data, tokensUsed, model } = apiResponse;
-    const costUsd = calculateCost(provider, endpoint, model, tokensUsed);
+    const resolvedModel = model || routingEndpoint.match(/\/models\/([^/:]+)/)?.[1] || null;
+    const costUsd = calculateCost(selectedProvider, routingEndpoint, resolvedModel, tokensUsed);
 
-    // Save success logs to MongoDB asynchronously to minimize response lag
     RequestLog.create({
       userId,
       apiKeyId,
-      provider,
-      endpoint,
+      provider: selectedProvider,
+      model: resolvedModel,
+      endpoint: routingEndpoint,
       method,
       status: 200,
       responseTimeMs,
       costUsd,
       tokensUsed,
-      cacheStatus: 'MISS', // Checked by cache middleware before reaching here
-      requestBody: JSON.stringify(body || {}),
+      cacheStatus: 'MISS',
+      requestBody: JSON.stringify(req.body || {}),
       responseBody: JSON.stringify(data || {})
     }).catch(err => logger.error(`Failed to create RequestLog in MongoDB: ${err.message}`));
 
-    // Write to Redis cache if cache configuration matched
     if (req.cacheKey && req.cacheRule) {
       try {
         const redis = getRedisClient();
@@ -110,14 +152,14 @@ const handleGatewayRequest = async (req, res) => {
   RequestLog.create({
     userId,
     apiKeyId,
-    provider,
-    endpoint,
+    provider: selectedProvider,
+    endpoint: routingEndpoint,
     method,
     status: 502,
     responseTimeMs,
     costUsd: failedCost,
     cacheStatus: 'BYPASS',
-    requestBody: JSON.stringify(body || {}),
+    requestBody: JSON.stringify(req.body || {}),
     errorMessage: errorDetail || 'Gateway Routing Failed'
   }).catch(err => logger.error(`Failed to log error log in MongoDB: ${err.message}`));
 

@@ -12,6 +12,7 @@ const simulateApiCall = async (provider, endpoint, method, body = {}, headers = 
         provider: 'openai',
         isActive: true
       });
+      logger.info(`OpenAI vault lookup: ${providerKeyDoc ? 'FOUND' : 'NOT FOUND'}`);
 
       if (providerKeyDoc) {
         const apiKey = providerKeyDoc.getDecryptedValue();
@@ -59,7 +60,7 @@ const simulateApiCall = async (provider, endpoint, method, body = {}, headers = 
   // Simulate network latency (200ms - 800ms)
   const latency = Math.floor(Math.random() * 600) + 200;
   await new Promise(resolve => setTimeout(resolve, latency));
-  
+
   // Custom error injection (1% rate to test gateway retries)
   if (Math.random() < 0.02) {
     throw new Error(`${provider} Gateway Timeout (Simulated failure for retry testing)`);
@@ -98,31 +99,87 @@ const simulateApiCall = async (provider, endpoint, method, body = {}, headers = 
       };
 
     case 'gemini':
-      const gModel = body.model || 'gemini-1.5-flash';
-      const gPrompt = (body.contents && body.contents[0] && body.contents[0].parts[0].text) || 'Hello';
-      const gPromptTokens = Math.max(5, Math.ceil(gPrompt.length / 4));
-      const gCompletionTokens = Math.floor(Math.random() * 60) + 15;
+      // 2. Real Gemini routing: vault lookup for active credential
+      if (userId) {
+        try {
+          const geminiKeyDoc = await ProviderKey.findOne({
+            userId,
+            provider: 'gemini',
+            isActive: true
+          });
 
-      return {
-        data: {
-          candidates: [{
-            content: {
-              parts: [{ text: `Gemini simulated response. Input parsed: "${gPrompt.substring(0, 35)}"` }],
-              role: 'model'
-            },
-            finishReason: 'STOP',
-            index: 0
-          }],
-          usageMetadata: {
-            promptTokenCount: gPromptTokens,
-            candidatesTokenCount: gCompletionTokens,
-            totalTokenCount: gPromptTokens + gCompletionTokens
+          if (geminiKeyDoc) {
+            const geminiApiKey = geminiKeyDoc.getDecryptedValue();
+            const geminiStartTime = Date.now();
+            // Forward endpoint as-is (e.g. /v1/models/gemini-1.5-flash:generateContent)
+            const geminiUrl = `https://generativelanguage.googleapis.com${endpoint}?key=${geminiApiKey}`;
+
+            logger.info(`Routing gateway request to real Gemini endpoint: ${endpoint}`);
+
+            const geminiResponse = await fetch(geminiUrl, {
+              method,
+              headers: { 'Content-Type': 'application/json' },
+              body: method !== 'GET' && method !== 'HEAD' ? JSON.stringify(body) : undefined
+            });
+
+            const geminiLatency = Date.now() - geminiStartTime;
+
+            if (!geminiResponse.ok) {
+              const errorText = await geminiResponse.text();
+              throw new Error(`Gemini Provider HTTP Error ${geminiResponse.status}: ${errorText}`);
+            }
+
+            const geminiData = await geminiResponse.json();
+            const usage = geminiData.usageMetadata || {};
+            const gPromptTokens = usage.promptTokenCount || 0;
+            const gCompletionTokens = usage.candidatesTokenCount || 0;
+            const gTotalTokens = usage.totalTokenCount || (gPromptTokens + gCompletionTokens);
+            const gModel = (geminiData.modelVersion) ||
+              (geminiData.candidates && geminiData.candidates[0] && geminiData.candidates[0].content && geminiData.candidates[0].content.model) ||
+              body.model || 'gemini-1.5-flash';
+
+            return {
+              data: geminiData,
+              tokensUsed: { promptTokens: gPromptTokens, completionTokens: gCompletionTokens, totalTokens: gTotalTokens },
+              model: gModel,
+              latency: geminiLatency
+            };
           }
-        },
-        tokensUsed: { promptTokens: gPromptTokens, completionTokens: gCompletionTokens, totalTokens: gPromptTokens + gCompletionTokens },
-        model: gModel,
-        latency
-      };
+        } catch (err) {
+          logger.error(`Real Gemini API execution error: ${err.message}`);
+          // Re-throw to trigger retry mechanism for genuine provider failures
+          throw err;
+        }
+      }
+
+      // Simulated Gemini fallback (no active vault credential found)
+      {
+        const gModel = body.model || 'gemini-1.5-flash';
+        const gPrompt = (body.contents && body.contents[0] && body.contents[0].parts[0].text) || 'Hello';
+        const gPromptTokens = Math.max(5, Math.ceil(gPrompt.length / 4));
+        const gCompletionTokens = Math.floor(Math.random() * 60) + 15;
+
+        return {
+          data: {
+            candidates: [{
+              content: {
+                parts: [{ text: `Gemini simulated response. Input parsed: "${gPrompt.substring(0, 35)}"` }],
+                role: 'model'
+              },
+              finishReason: 'STOP',
+              index: 0
+            }],
+            usageMetadata: {
+              promptTokenCount: gPromptTokens,
+              candidatesTokenCount: gCompletionTokens,
+              totalTokenCount: gPromptTokens + gCompletionTokens
+            }
+          },
+          tokensUsed: { promptTokens: gPromptTokens, completionTokens: gCompletionTokens, totalTokens: gPromptTokens + gCompletionTokens },
+          model: gModel,
+          latency
+        };
+      }
 
     case 'stripe':
       return {

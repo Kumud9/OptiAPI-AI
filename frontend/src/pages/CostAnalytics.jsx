@@ -114,6 +114,7 @@ const CostAnalytics = () => {
               <Tooltip
                 contentStyle={{ backgroundColor: '#09090B', borderColor: '#27272A', borderRadius: '10px' }}
                 labelStyle={{ fontSize: '10px', color: '#A1A1AA', fontWeight: 'bold' }}
+                itemStyle={{ color: '#E4E4E7', fontSize: '10px' }}
               />
               <Area type="monotone" dataKey="Spent ($)" stroke="#8B5CF6" fillOpacity={1} fill="url(#colorSpent)" strokeWidth={2} />
               <Area type="monotone" dataKey="Cached Saved ($)" stroke="#10B981" fillOpacity={1} fill="url(#colorSaved)" strokeWidth={2} />

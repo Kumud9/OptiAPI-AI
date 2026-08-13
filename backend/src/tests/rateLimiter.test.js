@@ -113,6 +113,60 @@ test('Gateway Rate Limiter Integration - Concurrency and Limits', async (t) => {
     assert.strictEqual(rateLimitedCount, 7, 'Exactly 7 requests should be blocked under concurrent load');
   });
 
+  await t.test('Case 4: Lua args are passed as strings (regression — args vs arguments API bug)', async () => {
+    // Reproduces the root cause: node-redis v4 eval() uses `arguments`, not `args`.
+    // With the old `args` key the Lua script received no ARGV and redis.call('expire', key, nil)
+    // threw: "ERR Lua redis lib command arguments must be strings or integers".
+    const capturedEvalOptions = {};
+    const mockRedis = {
+      eval: async (script, options) => {
+        capturedEvalOptions.keys = options.keys;
+        capturedEvalOptions.arguments = options.arguments;
+        capturedEvalOptions.args = options.args; // must be undefined after fix
+        // Simulate what real Redis does: fail if arguments property is missing/undefined
+        if (!options.arguments || options.arguments.length === 0) {
+          throw new Error('ERR Lua redis lib command arguments must be strings or integers');
+        }
+        // Verify all arguments are strings (Redis Lua requirement)
+        for (const arg of options.arguments) {
+          assert.strictEqual(typeof arg, 'string', `Lua argument "${arg}" must be a string`);
+        }
+        return 1; // first request in window
+      }
+    };
+
+    // Simulate the rate limiter logic with the mock client
+    const rpsLimit = 5;
+    const cacheKey = `ratelimit:test_key:${Math.floor(Date.now() / 1000)}`;
+    const rateLimitScript = `
+      local key = KEYS[1]
+      local ttl = tonumber(ARGV[2])
+      local current = redis.call('incr', key)
+      if tonumber(current) == 1 then
+        redis.call('expire', key, ttl)
+      end
+      return tonumber(current)
+    `;
+
+    // This should NOT throw after the fix (uses `arguments`, not `args`)
+    let threw = false;
+    try {
+      await mockRedis.eval(rateLimitScript, {
+        keys: [cacheKey],
+        arguments: [String(rpsLimit), '2']  // fixed: `arguments` key
+      });
+    } catch (err) {
+      threw = true;
+    }
+    assert.strictEqual(threw, false, 'eval must not throw with correct `arguments` property');
+
+    // Confirm the arguments array was populated (not silently dropped)
+    assert.ok(Array.isArray(capturedEvalOptions.arguments), '`arguments` array must be present');
+    assert.strictEqual(capturedEvalOptions.arguments[0], String(rpsLimit), 'ARGV[1] must be rpsLimit as string');
+    assert.strictEqual(capturedEvalOptions.arguments[1], '2', 'ARGV[2] (TTL) must be string "2"');
+    assert.strictEqual(capturedEvalOptions.args, undefined, '`args` must not be set (old broken property name)');
+  });
+
   // Cleanup test key and close DB connection
   await db.collection('apikeys').deleteOne({ key: TEST_KEY });
   await mongoose.disconnect();

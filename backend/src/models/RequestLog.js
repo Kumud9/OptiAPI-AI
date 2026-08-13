@@ -15,6 +15,10 @@ const RequestLogSchema = new mongoose.Schema({
     required: true,
     index: true
   },
+  model: {
+    type: String,
+    index: true
+  },
   endpoint: {
     type: String,
     required: true,

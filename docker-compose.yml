@@ -60,6 +60,7 @@ services:
       - RABBITMQ_URL=amqp://rabbitmq:5672
       - JWT_SECRET=optiapi_secret_key_for_jwt_tokens_2026_secure
       - NODE_ENV=production
+      - OPTIMIZATION_ENABLED=true
     depends_on:
       mongodb:
         condition: service_healthy

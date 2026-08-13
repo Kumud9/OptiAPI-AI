@@ -250,6 +250,7 @@ const Dashboard = () => {
                 <Tooltip
                   contentStyle={{ backgroundColor: '#09090B', borderColor: '#27272A', borderRadius: '10px' }}
                   labelStyle={{ fontSize: '10px', color: '#A1A1AA', fontWeight: 'bold' }}
+                  itemStyle={{ color: '#E4E4E7', fontSize: '10px' }}
                 />
                 <Area type="monotone" dataKey="requests" stroke="#3B82F6" fillOpacity={1} fill="url(#colorRequests)" strokeWidth={2} />
                 <Area type="monotone" dataKey="cost" stroke="#8B5CF6" fillOpacity={1} fill="url(#colorCost)" strokeWidth={2} />
@@ -284,7 +285,7 @@ const Dashboard = () => {
                   </Pie>
                   <Tooltip
                     contentStyle={{ backgroundColor: '#09090B', borderColor: '#27272A', borderRadius: '10px' }}
-                    itemStyle={{ fontSize: '10px' }}
+                    itemStyle={{ fontSize: '10px', color: '#E4E4E7' }}
                   />
                 </PieChart>
               </ResponsiveContainer>
