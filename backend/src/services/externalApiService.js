@@ -181,6 +181,58 @@ const simulateApiCall = async (provider, endpoint, method, body = {}, headers = 
         };
       }
 
+    case 'anthropic':
+      if (!userId) {
+        throw new Error('User authentication required for Anthropic API requests');
+      }
+      {
+        const providerKeyDoc = await ProviderKey.findOne({
+          userId,
+          provider: 'anthropic',
+          isActive: true
+        });
+
+        if (!providerKeyDoc) {
+          throw new Error('No active Anthropic API key found in vault for this user');
+        }
+
+        const apiKey = providerKeyDoc.getDecryptedValue();
+        const startTime = Date.now();
+        const url = `https://api.anthropic.com${endpoint}`;
+
+        logger.info(`Routing gateway request to real Anthropic endpoint: ${endpoint}`);
+
+        const response = await fetch(url, {
+          method,
+          headers: {
+            'Content-Type': 'application/json',
+            'x-api-key': apiKey,
+            'anthropic-version': '2023-06-01'
+          },
+          body: method !== 'GET' && method !== 'HEAD' ? JSON.stringify(body) : undefined
+        });
+
+        const latency = Date.now() - startTime;
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          throw new Error(`Anthropic Provider HTTP Error ${response.status}: ${errorText}`);
+        }
+
+        const data = await response.json();
+        const promptTokens = (data.usage && data.usage.input_tokens) || 0;
+        const completionTokens = (data.usage && data.usage.output_tokens) || 0;
+        const totalTokens = promptTokens + completionTokens;
+        const model = data.model || body.model || 'claude-sonnet-4-6';
+
+        return {
+          data,
+          tokensUsed: { promptTokens, completionTokens, totalTokens },
+          model,
+          latency
+        };
+      }
+
     case 'stripe':
       return {
         data: {

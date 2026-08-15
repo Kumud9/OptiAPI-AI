@@ -69,6 +69,27 @@ const RequestLogSchema = new mongoose.Schema({
     type: Date,
     default: Date.now,
     index: true
+  },
+  optimizationEnabled: {
+    type: Boolean,
+    default: false
+  },
+  optimizationUsed: {
+    type: Boolean,
+    default: false,
+    index: true
+  },
+  optimizationMode: {
+    type: String,
+    default: null
+  },
+  optimizationSelectedProvider: {
+    type: String,
+    default: null
+  },
+  optimizationSelectedModel: {
+    type: String,
+    default: null
   }
 });
 

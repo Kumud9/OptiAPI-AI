@@ -8,6 +8,7 @@ const { getTelemetryMetrics } = require('../controllers/telemetryController');
 const { getHistoricalMetrics } = require('../controllers/historicalDataController');
 const { getRecommendation } = require('../controllers/scoringController');
 const { getDecision } = require('../controllers/optimizationDecisionController');
+const { getOptimizationEvaluation } = require('../controllers/optimizationEvaluationController');
 
 const { protect } = require('../middleware/auth');
 
@@ -33,5 +34,7 @@ router.get('/recommendation', getRecommendation);
 // Optimization decision engine route.
 router.get('/decision', getDecision);
 
+// Optimization evaluation route.
+router.get('/evaluation', getOptimizationEvaluation);
 
 module.exports = router;

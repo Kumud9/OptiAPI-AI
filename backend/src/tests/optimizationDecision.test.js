@@ -157,7 +157,11 @@ test('Optimization Decision Engine Unit Tests', async (t) => {
       };
     };
     const res = await getOptimizationDecision(mockUserId, 'balanced');
-    assert.strictEqual(res, null);
+    assert.deepStrictEqual(res, {
+      success: false,
+      code: 'INSUFFICIENT_DATA',
+      message: 'Not enough historical provider data to make a reliable recommendation.'
+    });
   });
 
   await t.test('7. Admin data exclusion', async () => {
@@ -167,6 +171,148 @@ test('Optimization Decision Engine Unit Tests', async (t) => {
       };
     };
     const res = await getOptimizationDecision(mockAdminId, 'balanced');
-    assert.strictEqual(res, null);
+    assert.deepStrictEqual(res, {
+      success: false,
+      code: 'INSUFFICIENT_DATA',
+      message: 'Not enough historical provider data to make a reliable recommendation.'
+    });
+  });
+
+  await t.test('8. Gemini-only eligible candidate', async () => {
+    RequestLog.find = () => {
+      return {
+        lean: async () => generateMockLogs(4, 10)
+      };
+    };
+    const res = await getOptimizationDecision(mockUserId, 'balanced');
+    assert.ok(res);
+    assert.strictEqual(res.success, true);
+    assert.strictEqual(res.decision.provider, 'gemini');
+  });
+
+  await t.test('9. Multiple eligible providers -> highest score selected', async () => {
+    RequestLog.find = () => {
+      return {
+        lean: async () => generateMockLogs(10, 10)
+      };
+    };
+    const res = await getOptimizationDecision(mockUserId, 'balanced');
+    assert.ok(res);
+    assert.strictEqual(res.success, true);
+    assert.strictEqual(res.decision.provider, 'gemini');
+  });
+
+  await t.test('10. Cost mode chooses lowest-cost eligible candidate', async () => {
+    RequestLog.find = () => {
+      return {
+        lean: async () => {
+          const logs = [];
+          for (let i = 0; i < 10; i++) {
+            logs.push({
+              userId: mockUserId,
+              provider: 'openai',
+              model: 'gpt-4o',
+              endpoint: '/v1/chat/completions',
+              status: 200,
+              responseTimeMs: 300,
+              costUsd: 0.0001,
+              tokensUsed: { totalTokens: 100 },
+              cacheStatus: 'MISS'
+            });
+            logs.push({
+              userId: mockUserId,
+              provider: 'gemini',
+              model: 'gemini-3.1-flash-lite',
+              endpoint: '/v1/models/gemini-3.1-flash-lite:generateContent',
+              status: 200,
+              responseTimeMs: 150,
+              costUsd: 0.01,
+              tokensUsed: { totalTokens: 200 },
+              cacheStatus: 'MISS'
+            });
+          }
+          return logs;
+        }
+      };
+    };
+    const res = await getOptimizationDecision(mockUserId, 'cost');
+    assert.ok(res);
+    assert.strictEqual(res.success, true);
+    assert.strictEqual(res.decision.provider, 'openai');
+  });
+
+  await t.test('11. Latency mode chooses lowest-latency eligible candidate', async () => {
+    RequestLog.find = () => {
+      return {
+        lean: async () => {
+          const logs = [];
+          for (let i = 0; i < 10; i++) {
+            logs.push({
+              userId: mockUserId,
+              provider: 'openai',
+              model: 'gpt-4o',
+              endpoint: '/v1/chat/completions',
+              status: 200,
+              responseTimeMs: 50,
+              costUsd: 0.01,
+              tokensUsed: { totalTokens: 100 },
+              cacheStatus: 'MISS'
+            });
+            logs.push({
+              userId: mockUserId,
+              provider: 'gemini',
+              model: 'gemini-3.1-flash-lite',
+              endpoint: '/v1/models/gemini-3.1-flash-lite:generateContent',
+              status: 200,
+              responseTimeMs: 500,
+              costUsd: 0.0001,
+              tokensUsed: { totalTokens: 200 },
+              cacheStatus: 'MISS'
+            });
+          }
+          return logs;
+        }
+      };
+    };
+    const res = await getOptimizationDecision(mockUserId, 'latency');
+    assert.ok(res);
+    assert.strictEqual(res.success, true);
+    assert.strictEqual(res.decision.provider, 'openai');
+  });
+
+  await t.test('12. Balanced mode uses existing weights', async () => {
+    RequestLog.find = () => {
+      return {
+        lean: async () => generateMockLogs(10, 10)
+      };
+    };
+    const res = await getOptimizationDecision(mockUserId, 'balanced');
+    assert.ok(res);
+    assert.strictEqual(res.success, true);
+    assert.strictEqual(res.mode, 'balanced');
+    assert.ok(res.decision.score > 0);
+  });
+
+  await t.test('13. Provider with insufficient data excluded', async () => {
+    RequestLog.find = () => {
+      return {
+        lean: async () => generateMockLogs(3, 10)
+      };
+    };
+    const res = await getOptimizationDecision(mockUserId, 'balanced');
+    assert.ok(res);
+    assert.strictEqual(res.success, true);
+    assert.strictEqual(res.decision.provider, 'gemini');
+  });
+
+  await t.test('14. Existing fallback behavior remains unchanged', async () => {
+    RequestLog.find = () => {
+      return {
+        lean: async () => []
+      };
+    };
+    const res = await getOptimizationDecision(mockUserId, 'balanced');
+    assert.strictEqual(res.success, false);
+    assert.strictEqual(res.code, 'INSUFFICIENT_DATA');
   });
 });

@@ -10,7 +10,7 @@ const ProviderKeySchema = new mongoose.Schema({
   provider: {
     type: String,
     required: true,
-    enum: ['openai', 'gemini', 'claude', 'google_maps', 'stripe', 'twilio', 'weather', 'custom']
+    enum: ['openai', 'gemini', 'claude', 'anthropic', 'google_maps', 'stripe', 'twilio', 'weather', 'custom']
   },
   name: {
     type: String,

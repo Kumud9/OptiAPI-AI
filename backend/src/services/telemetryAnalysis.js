@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Historical Telemetry Analysis Service
  * ======================================
  * Reads and aggregates RequestLog data to produce per-(provider, model, endpoint)
@@ -20,7 +20,7 @@ const RequestLog = require('../models/RequestLog');
 const logger = require('../utils/logger');
 
 /** Providers the Optimization Engine cares about. */
-const ANALYSED_PROVIDERS = ['gemini', 'openai'];
+const ANALYSED_PROVIDERS = ['gemini', 'openai', 'anthropic'];
 
 /**
  * Derive a model name from a gateway endpoint path.

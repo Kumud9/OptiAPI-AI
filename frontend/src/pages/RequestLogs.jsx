@@ -90,7 +90,7 @@ const RequestLogs = () => {
             <option value="">All Providers</option>
             <option value="openai">OpenAI</option>
             <option value="gemini">Gemini</option>
-            <option value="claude">Claude</option>
+            <option value="anthropic">Claude</option>
             <option value="stripe">Stripe</option>
             <option value="google_maps">Google Maps</option>
             <option value="twilio">Twilio</option>
@@ -159,7 +159,7 @@ const RequestLogs = () => {
                   {logs.map((log) => (
                     <tr key={log._id} className="hover:bg-zinc-900/10">
                       <td className="py-3 text-zinc-500">{new Date(log.timestamp).toLocaleString()}</td>
-                      <td className="py-3 font-semibold capitalize text-zinc-200">{log.provider.replace('_', ' ')}</td>
+                      <td className="py-3 font-semibold capitalize text-zinc-200">{log.provider === 'anthropic' || log.provider === 'claude' ? 'Claude' : log.provider.replace('_', ' ')}</td>
                       <td className="py-3 font-semibold text-zinc-400">{log.method}</td>
                       <td className="py-3 text-zinc-400 font-mono truncate max-w-xs">{log.endpoint}</td>
                       <td className="py-3">
@@ -247,7 +247,7 @@ const RequestLogs = () => {
               <div className="grid grid-cols-2 gap-4 p-4 rounded-xl bg-zinc-900/30 border border-zinc-850">
                 <div>
                   <span className="text-zinc-500 font-semibold uppercase text-[9px] block">Provider</span>
-                  <span className="capitalize font-medium text-zinc-300">{selectedLog.provider.replace('_', ' ')}</span>
+                  <span className="capitalize font-medium text-zinc-300">{selectedLog.provider === 'anthropic' || selectedLog.provider === 'claude' ? 'Claude' : selectedLog.provider.replace('_', ' ')}</span>
                 </div>
                 <div>
                   <span className="text-zinc-500 font-semibold uppercase text-[9px] block">Endpoint</span>

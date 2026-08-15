@@ -3,7 +3,7 @@
 const { getHistoricalMetricsForUser } = require('./historicalDataService');
 const { calculateRecommendation } = require('./scoringService');
 
-const SUPPORTED_PROVIDERS = ['gemini', 'openai'];
+const SUPPORTED_PROVIDERS = ['gemini', 'openai', 'anthropic'];
 
 /**
  * Builds the optimization decision for a given user, mode, and provider filter.
@@ -21,7 +21,11 @@ async function getOptimizationDecision(userId, mode = 'balanced', providersFilte
   const recommendation = calculateRecommendation(metrics, mode, providersFilter);
 
   if (!recommendation) {
-    return null;
+    return {
+      success: false,
+      code: 'INSUFFICIENT_DATA',
+      message: 'Not enough historical provider data to make a reliable recommendation.'
+    };
   }
 
   // Find the original metric details for explanation
@@ -32,7 +36,11 @@ async function getOptimizationDecision(userId, mode = 'balanced', providersFilte
   );
 
   if (!matchingMetric) {
-    return null;
+    return {
+      success: false,
+      code: 'INSUFFICIENT_DATA',
+      message: 'Not enough historical provider data to make a reliable recommendation.'
+    };
   }
 
   // Build the explainability reasons

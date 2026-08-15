@@ -99,7 +99,7 @@ const ApiProviders = () => {
               >
                 <option value="openai">OpenAI (Chat, Embeddings)</option>
                 <option value="gemini">Gemini (Google AI Studio)</option>
-                <option value="claude">Claude (Anthropic)</option>
+                <option value="anthropic">Claude (Anthropic)</option>
                 <option value="stripe">Stripe Payments</option>
                 <option value="google_maps">Google Maps APIs</option>
                 <option value="twilio">Twilio Messaging</option>
@@ -168,7 +168,7 @@ const ApiProviders = () => {
                   <div className="flex justify-between items-start">
                     <div>
                       <span className="text-[10px] font-bold text-primary-light uppercase tracking-wider">
-                        {k.provider.replace('_', ' ')}
+                        {k.provider === 'anthropic' || k.provider === 'claude' ? 'Claude' : k.provider.replace('_', ' ')}
                       </span>
                       <h4 className="text-sm font-bold text-zinc-200 mt-1">{k.name}</h4>
                     </div>

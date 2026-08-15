@@ -11,7 +11,7 @@ services:
     networks:
       - optiapi_network
     healthcheck:
-      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      test: [ "CMD", "mongosh", "--eval", "db.adminCommand('ping')" ]
       interval: 5s
       timeout: 5s
       retries: 3
@@ -25,7 +25,7 @@ services:
     networks:
       - optiapi_network
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: [ "CMD", "redis-cli", "ping" ]
       interval: 5s
       timeout: 5s
       retries: 3
@@ -40,7 +40,7 @@ services:
     networks:
       - optiapi_network
     healthcheck:
-      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      test: [ "CMD", "rabbitmq-diagnostics", "-q", "ping" ]
       interval: 5s
       timeout: 5s
       retries: 3
@@ -59,6 +59,7 @@ services:
       - REDIS_URL=redis://redis:6379
       - RABBITMQ_URL=amqp://rabbitmq:5672
       - JWT_SECRET=optiapi_secret_key_for_jwt_tokens_2026_secure
+      - VAULT_ENCRYPTION_KEY=optiapi_vault_encryption_key_secure_2026_xYz
       - NODE_ENV=production
       - OPTIMIZATION_ENABLED=true
     depends_on:

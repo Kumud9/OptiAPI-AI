@@ -34,7 +34,7 @@ const createApiKeySchema = z.object({
 });
 
 const createProviderKeySchema = z.object({
-  provider: z.enum(['openai', 'gemini', 'claude', 'google_maps', 'stripe', 'twilio', 'weather', 'custom'], {
+  provider: z.enum(['openai', 'gemini', 'claude', 'anthropic', 'google_maps', 'stripe', 'twilio', 'weather', 'custom'], {
     errorMap: () => ({ message: 'Unsupported provider type' })
   }),
   name: z.string().min(1, 'Please provide a descriptive name').trim(),
@@ -61,7 +61,7 @@ const getLogsQuerySchema = z.object({
 
 // 6. Gateway specific schemas
 const gatewayParamsSchema = z.object({
-  provider: z.enum(['openai', 'gemini', 'claude', 'google_maps', 'stripe', 'twilio', 'weather', 'custom'], {
+  provider: z.enum(['openai', 'gemini', 'claude', 'anthropic', 'google_maps', 'stripe', 'twilio', 'weather', 'custom'], {
     errorMap: () => ({ message: 'Unsupported provider' })
   }),
   0: z.string({
@@ -131,6 +131,23 @@ const twilioSmsSchema = z.object({
 
 const weatherSchema = z.object({
   city: z.string().min(1, 'city is required')
+}).passthrough();
+
+const anthropicMessagesSchema = z.object({
+  model: z.string({
+    required_error: 'model is required'
+  }).min(1, 'model cannot be empty'),
+  max_tokens: z.number().int().positive('max_tokens must be a positive integer').optional().default(256),
+  messages: z.array(
+    z.object({
+      role: z.enum(['user', 'assistant'], {
+        errorMap: () => ({ message: 'role must be user or assistant' })
+      }),
+      content: z.union([z.string(), z.array(z.any())], {
+        required_error: 'message content is required'
+      })
+    })
+  ).min(1, 'messages array cannot be empty')
 }).passthrough();
 
 /**
@@ -275,6 +292,8 @@ const validateGateway = (req, res, next) => {
     bodySchema = openAIChatSchema;
   } else if (provider === 'gemini' && (endpoint.includes('generateContent') || endpoint.includes('contents'))) {
     bodySchema = geminiGenerateContentSchema;
+  } else if (provider === 'anthropic' && (endpoint.includes('messages'))) {
+    bodySchema = anthropicMessagesSchema;
   } else if (provider === 'stripe' && (endpoint.includes('charges') || endpoint.includes('payment_intents') || endpoint.includes('customers'))) {
     bodySchema = stripeChargeSchema;
   } else if (provider === 'twilio' && (endpoint.includes('Messages') || endpoint.includes('messages'))) {

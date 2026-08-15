@@ -5,7 +5,7 @@ const RequestLog = require('../models/RequestLog');
 const User = require('../models/User');
 const logger = require('../utils/logger');
 
-const ANALYZED_PROVIDERS = ['gemini', 'openai'];
+const ANALYZED_PROVIDERS = ['gemini', 'openai', 'anthropic'];
 
 /**
  * Helper to compute the 95th percentile latency from an array of latencies.

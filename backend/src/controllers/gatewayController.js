@@ -1,4 +1,4 @@
-const { simulateApiCall } = require('../services/externalApiService');
+const externalApiService = require('../services/externalApiService');
 const { calculateCost } = require('../services/costCalculator');
 const { publishToQueue } = require('../services/queueService');
 const { getRedisClient } = require('../config/redis');
@@ -28,23 +28,112 @@ const handleGatewayRequest = async (req, res) => {
   req.headers = req.headers || {};
   const mode = req.query.mode || req.headers['x-optiapi-mode'] || 'balanced';
 
-  if (optimizationEnabled && (provider === 'openai' || provider === 'gemini')) {
+  if (optimizationEnabled && (provider === 'openai' || provider === 'gemini' || provider === 'anthropic')) {
     try {
       const { getOptimizationDecision } = require('../services/optimizationDecisionService');
-      const decisionResult = await getOptimizationDecision(userId, mode, [provider]);
+      const decisionResult = await getOptimizationDecision(userId, mode);
       if (decisionResult && decisionResult.success && decisionResult.decision) {
-        const { provider: recProvider, model: recModel } = decisionResult.decision;
-        if (recProvider === provider && recModel) {
+        const { provider: recProvider, model: recModel, endpoint: recEndpoint } = decisionResult.decision;
+        const successfulRequests = decisionResult.metrics?.successfulRequests;
+
+        // Safety rules validation:
+        const isSupportedProvider = recProvider === 'openai' || recProvider === 'gemini' || recProvider === 'anthropic';
+        const hasModelAndEndpoint = !!recModel && !!recEndpoint;
+        const hasMinSuccessfulRequests = typeof successfulRequests === 'number' && successfulRequests >= 5;
+
+        if (isSupportedProvider && hasModelAndEndpoint && hasMinSuccessfulRequests) {
+          selectedProvider = recProvider;
           selectedModel = recModel;
           optimizationUsed = true;
           
-          if (provider === 'openai') {
+          if (selectedProvider === 'openai' || selectedProvider === 'anthropic') {
             req.body = req.body || {};
             req.body.model = selectedModel;
-          } else if (provider === 'gemini') {
-            routingEndpoint = endpoint.replace(/\/models\/([^/:]+)/, `/models/${selectedModel}`);
+            routingEndpoint = recEndpoint;
+          } else if (selectedProvider === 'gemini') {
+            routingEndpoint = recEndpoint.replace(/\/models\/([^/:]+)/, `/models/${selectedModel}`);
           }
-          logger.info(`Optimization active: routed request to model [${selectedModel}] for provider [${provider.toUpperCase()}]`);
+          logger.info(`Optimization active: routed request to provider [${selectedProvider.toUpperCase()}] model [${selectedModel}]`);
+
+          // Re-evaluate cache for the new routed endpoint/provider
+          if (selectedProvider !== provider || routingEndpoint !== endpoint) {
+            try {
+              const CacheRule = require('../models/CacheRule');
+              const rule = await CacheRule.findOne({
+                userId,
+                provider: selectedProvider.toLowerCase(),
+                endpoint: routingEndpoint.toLowerCase(),
+                isActive: true
+              });
+
+              if (rule) {
+                req.cacheRule = rule;
+                const crypto = require('crypto');
+                const bodyStr = JSON.stringify(req.body || {});
+                const queryStr = JSON.stringify(req.query || {});
+                const requestHash = crypto.createHash('sha256')
+                  .update(bodyStr + queryStr)
+                  .digest('hex');
+
+                const cacheKey = `apicache:${userId}:${selectedProvider}:${routingEndpoint}:${requestHash}`;
+                req.cacheKey = cacheKey;
+
+                const redis = getRedisClient();
+                const cachedResponse = await redis.get(cacheKey);
+
+                if (cachedResponse) {
+                  logger.info(`Cache HIT on gateway after optimization routing: [${selectedProvider.toUpperCase()}] ${routingEndpoint}`);
+                  req.cacheStatus = 'HIT';
+                  
+                  const parsedData = JSON.parse(cachedResponse);
+                  
+                  res.setHeader('X-OptiAPI-Cache', 'HIT');
+                  res.setHeader('X-OptiAPI-TTL', rule.ttlSeconds);
+                  res.setHeader('X-OptiAPI-Cost', '0.00000000');
+                  res.setHeader('X-OptiAPI-Time', '2ms');
+
+                  req.optimization = {
+                    optimizationEnabled,
+                    optimizationSelectedProvider: selectedProvider,
+                    optimizationSelectedModel: selectedModel,
+                    optimizationMode: mode,
+                    optimizationUsed
+                  };
+
+                  RequestLog.create({
+                    userId,
+                    apiKeyId,
+                    provider: selectedProvider,
+                    model: selectedModel,
+                    endpoint: routingEndpoint,
+                    method,
+                    status: 200,
+                    responseTimeMs: 2,
+                    costUsd: 0.0,
+                    tokensUsed: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+                    cacheStatus: 'HIT',
+                    requestBody: JSON.stringify(req.body || {}),
+                    responseBody: cachedResponse,
+                    optimizationEnabled,
+                    optimizationUsed,
+                    optimizationMode: mode,
+                    optimizationSelectedProvider: selectedProvider,
+                    optimizationSelectedModel: selectedModel
+                  }).catch(err => logger.error(`Failed to log cache HIT: ${err.message}`));
+
+                  return res.status(200).json(parsedData);
+                } else {
+                  req.cacheStatus = 'MISS';
+                }
+              } else {
+                req.cacheRule = null;
+                req.cacheKey = null;
+                req.cacheStatus = 'BYPASS';
+              }
+            } catch (cacheErr) {
+              logger.error(`Cache lookup failed during optimization routing: ${cacheErr.message}`);
+            }
+          }
         }
       }
     } catch (err) {
@@ -93,7 +182,7 @@ const handleGatewayRequest = async (req, res) => {
   while (attempts < maxAttempts && !requestSucceeded) {
     try {
       attempts++;
-      apiResponse = await simulateApiCall(selectedProvider, routingEndpoint, method, req.body, headers, userId);
+      apiResponse = await externalApiService.simulateApiCall(selectedProvider, routingEndpoint, method, req.body, headers, userId);
       requestSucceeded = true;
     } catch (err) {
       errorDetail = err.message;
@@ -127,7 +216,12 @@ const handleGatewayRequest = async (req, res) => {
       tokensUsed,
       cacheStatus: 'MISS',
       requestBody: JSON.stringify(req.body || {}),
-      responseBody: JSON.stringify(data || {})
+      responseBody: JSON.stringify(data || {}),
+      optimizationEnabled: req.optimization?.optimizationEnabled || false,
+      optimizationUsed: req.optimization?.optimizationUsed || false,
+      optimizationMode: req.optimization?.optimizationMode || null,
+      optimizationSelectedProvider: req.optimization?.optimizationSelectedProvider || null,
+      optimizationSelectedModel: req.optimization?.optimizationSelectedModel || null
     }).catch(err => logger.error(`Failed to create RequestLog in MongoDB: ${err.message}`));
 
     if (req.cacheKey && req.cacheRule) {
@@ -160,7 +254,12 @@ const handleGatewayRequest = async (req, res) => {
     costUsd: failedCost,
     cacheStatus: 'BYPASS',
     requestBody: JSON.stringify(req.body || {}),
-    errorMessage: errorDetail || 'Gateway Routing Failed'
+    errorMessage: errorDetail || 'Gateway Routing Failed',
+    optimizationEnabled: req.optimization?.optimizationEnabled || false,
+    optimizationUsed: req.optimization?.optimizationUsed || false,
+    optimizationMode: req.optimization?.optimizationMode || null,
+    optimizationSelectedProvider: req.optimization?.optimizationSelectedProvider || null,
+    optimizationSelectedModel: req.optimization?.optimizationSelectedModel || null
   }).catch(err => logger.error(`Failed to log error log in MongoDB: ${err.message}`));
 
   return res.status(502).json({

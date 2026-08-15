@@ -131,7 +131,7 @@ const CacheManager = () => {
               >
                 <option value="openai">OpenAI</option>
                 <option value="gemini">Gemini</option>
-                <option value="claude">Claude</option>
+                <option value="anthropic">Claude</option>
                 <option value="stripe">Stripe</option>
                 <option value="google_maps">Google Maps</option>
                 <option value="twilio">Twilio</option>
@@ -197,7 +197,7 @@ const CacheManager = () => {
                 <tbody className="divide-y divide-zinc-800/30">
                   {rules.map((rule) => (
                     <tr key={rule._id} className="hover:bg-zinc-900/10">
-                      <td className="py-3 font-semibold capitalize text-zinc-200">{rule.provider.replace('_', ' ')}</td>
+                      <td className="py-3 font-semibold capitalize text-zinc-200">{rule.provider === 'anthropic' || rule.provider === 'claude' ? 'Claude' : rule.provider.replace('_', ' ')}</td>
                       <td className="py-3 text-zinc-400 font-mono">{rule.endpoint}</td>
                       <td className="py-3 text-center text-zinc-300">
                         {rule.ttlSeconds >= 86400 

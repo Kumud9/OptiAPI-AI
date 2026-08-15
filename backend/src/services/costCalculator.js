@@ -19,6 +19,12 @@ const PRICING = {
     'gemini-1.0-pro': { prompt: 0.50 / 1e6, completion: 1.50 / 1e6 },
     'default': { prompt: 0.50 / 1e6, completion: 1.50 / 1e6 }
   },
+  anthropic: {
+    'claude-sonnet-4-6': { prompt: 3.00 / 1e6, completion: 15.00 / 1e6 },
+    'claude-haiku-4-5-20251001': { prompt: 1.00 / 1e6, completion: 5.00 / 1e6 },
+    'claude-opus-4-6': { prompt: 5.00 / 1e6, completion: 25.00 / 1e6 },
+    'default': { prompt: 3.00 / 1e6, completion: 15.00 / 1e6 }
+  },
   claude: {
     'claude-3-opus': { prompt: 15.00 / 1e6, completion: 75.00 / 1e6 },
     'claude-3-sonnet': { prompt: 3.00 / 1e6, completion: 15.00 / 1e6 },
@@ -66,7 +72,7 @@ const calculateCost = (provider, endpoint, model = '', tokens = { promptTokens: 
   const pricingGroup = PRICING[providerLower] || PRICING.custom;
 
   // 1. LLM token-based cost
-  if (['openai', 'gemini', 'claude'].includes(providerLower)) {
+  if (['openai', 'gemini', 'claude', 'anthropic'].includes(providerLower)) {
     const modelKey = Object.keys(pricingGroup).find(k => model.toLowerCase().includes(k)) || 'default';
     const rate = pricingGroup[modelKey];
     

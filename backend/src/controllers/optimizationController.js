@@ -50,7 +50,7 @@ const applyRecommendation = async (req, res) => {
       const msg = recommendation.message.toLowerCase();
       if (msg.includes('openai')) matchedProvider = 'openai';
       else if (msg.includes('gemini')) matchedProvider = 'gemini';
-      else if (msg.includes('claude')) matchedProvider = 'claude';
+      else if (msg.includes('claude')) matchedProvider = 'anthropic';
       else if (msg.includes('stripe')) matchedProvider = 'stripe';
       else if (msg.includes('google')) matchedProvider = 'google_maps';
       
