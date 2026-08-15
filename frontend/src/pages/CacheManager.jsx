@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import api from '../services/api';
 import { useToast } from '../context/ToastContext';
-import { Database, Plus, Trash2, ShieldAlert, Sparkles, Loader2 } from 'lucide-react';
+import { Database, Plus, Trash2, ShieldAlert, Sparkles, Loader2, Info } from 'lucide-react';
+import { GATEWAY_INTEGRATIONS, DEFAULT_GEMINI_MODELS } from '../utils/gatewaySpecs';
 
 const CacheManager = () => {
   const { addToast } = useToast();
@@ -12,7 +13,9 @@ const CacheManager = () => {
 
   // Form states
   const [provider, setProvider] = useState('openai');
-  const [endpoint, setEndpoint] = useState('');
+  const [selectedGeminiModel, setSelectedGeminiModel] = useState(DEFAULT_GEMINI_MODELS[0]);
+  const [customEndpoint, setCustomEndpoint] = useState('');
+  const [isCustomMode, setIsCustomMode] = useState(false);
   const [ttlSeconds, setTtlSeconds] = useState(3600);
 
   const fetchCacheRules = async () => {
@@ -34,10 +37,34 @@ const CacheManager = () => {
     fetchCacheRules();
   }, []);
 
+  // Sync mode settings when provider changes
+  useEffect(() => {
+    if (provider === 'custom') {
+      setIsCustomMode(true);
+    } else {
+      setIsCustomMode(false);
+    }
+  }, [provider]);
+
+  // Compute endpoint dynamically from specs
+  const getSelectedEndpointPath = () => {
+    if (isCustomMode) {
+      return customEndpoint;
+    }
+    const spec = GATEWAY_INTEGRATIONS[provider];
+    if (!spec) return '';
+    if (provider === 'gemini') {
+      return spec.endpoint.replace('{model}', selectedGeminiModel);
+    }
+    return spec.endpoint;
+  };
+
   const handleCreateRule = async (e) => {
     e.preventDefault();
-    if (!endpoint) {
-      addToast('Please provide an endpoint endpoint path', 'warning');
+    const finalEndpointPath = getSelectedEndpointPath();
+
+    if (!finalEndpointPath) {
+      addToast('Please provide an endpoint path', 'warning');
       return;
     }
 
@@ -45,14 +72,15 @@ const CacheManager = () => {
     try {
       const response = await api.post('/cache/rules', {
         provider,
-        endpoint,
+        endpoint: finalEndpointPath,
         ttlSeconds: parseInt(ttlSeconds, 10)
       });
 
       if (response.data.success) {
         addToast('Cache rule configured successfully!', 'success');
-        setEndpoint('');
-        setTtlSeconds(3600);
+        if (isCustomMode) {
+          setCustomEndpoint('');
+        }
         fetchCacheRules();
       }
     } catch (error) {
@@ -131,7 +159,7 @@ const CacheManager = () => {
               >
                 <option value="openai">OpenAI</option>
                 <option value="gemini">Gemini</option>
-                <option value="anthropic">Claude</option>
+                <option value="anthropic">Claude (Anthropic)</option>
                 <option value="stripe">Stripe</option>
                 <option value="google_maps">Google Maps</option>
                 <option value="twilio">Twilio</option>
@@ -140,16 +168,70 @@ const CacheManager = () => {
               </select>
             </div>
 
-            <div>
-              <label className="block text-xs font-semibold text-zinc-400 mb-1.5">Endpoint Path</label>
-              <input
-                type="text"
-                value={endpoint}
-                onChange={(e) => setEndpoint(e.target.value)}
-                placeholder="/v1/chat/completions"
-                className="w-full bg-zinc-900 border border-zinc-800 rounded-xl py-2 px-3 text-xs text-zinc-200 placeholder-zinc-650 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary"
-                required
-              />
+            {/* Selector or custom text field */}
+            {!isCustomMode ? (
+              <div className="space-y-4">
+                <div>
+                  <div className="flex justify-between items-center mb-1.5">
+                    <label className="block text-xs font-semibold text-zinc-400">Endpoint Path</label>
+                    <button
+                      type="button"
+                      onClick={() => setIsCustomMode(true)}
+                      className="text-[10px] text-primary-light hover:underline font-semibold"
+                    >
+                      Custom Path
+                    </button>
+                  </div>
+                  <div className="p-2.5 rounded-xl bg-zinc-900 border border-zinc-800 text-xs text-zinc-300 font-mono break-all">
+                    {GATEWAY_INTEGRATIONS[provider]?.endpoint.replace('{model}', provider === 'gemini' ? selectedGeminiModel : '')}
+                  </div>
+                </div>
+
+                {provider === 'gemini' && (
+                  <div>
+                    <label className="block text-xs font-semibold text-zinc-400 mb-1.5">Gemini Target Model</label>
+                    <select
+                      value={selectedGeminiModel}
+                      onChange={(e) => setSelectedGeminiModel(e.target.value)}
+                      className="w-full bg-zinc-900 border border-zinc-800 rounded-xl py-2 px-3 text-xs text-zinc-350 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary"
+                    >
+                      {DEFAULT_GEMINI_MODELS.map(m => (
+                        <option key={m} value={m}>{m}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div>
+                <div className="flex justify-between items-center mb-1.5">
+                  <label className="block text-xs font-semibold text-zinc-400">Endpoint Path</label>
+                  {provider !== 'custom' && (
+                    <button
+                      type="button"
+                      onClick={() => setIsCustomMode(false)}
+                      className="text-[10px] text-zinc-500 hover:text-zinc-350 hover:underline"
+                    >
+                      Preset Path
+                    </button>
+                  )}
+                </div>
+                <input
+                  type="text"
+                  value={customEndpoint}
+                  onChange={(e) => setCustomEndpoint(e.target.value)}
+                  placeholder="/v1/chat/completions"
+                  className="w-full bg-zinc-900 border border-zinc-800 rounded-xl py-2 px-3 text-xs text-zinc-200 placeholder-zinc-650 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary font-mono"
+                  required
+                />
+              </div>
+            )}
+
+            <div className="p-3 rounded-lg bg-zinc-900/30 border border-zinc-850 flex gap-2 text-[10px] text-zinc-450 leading-relaxed">
+              <Info size={14} className="text-primary-light shrink-0 mt-0.5" />
+              <span>
+                Caching is active for the target gateway route: `/api/v1/gateway${getSelectedEndpointPath()}`. Make sure client requests match this path.
+              </span>
             </div>
 
             <div>
@@ -160,6 +242,7 @@ const CacheManager = () => {
                 onChange={(e) => setTtlSeconds(e.target.value)}
                 className="w-full bg-zinc-900 border border-zinc-800 rounded-xl py-2 px-3 text-xs text-zinc-200 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary"
                 required
+                min="1"
               />
             </div>
 
