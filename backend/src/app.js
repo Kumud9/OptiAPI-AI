@@ -12,11 +12,27 @@ const analyticsRoutes = require('./routes/analyticsRoutes');
 const optimizationRoutes = require('./routes/optimizationRoutes');
 const adminRoutes = require('./routes/adminRoutes');
 
+const helmet = require('helmet');
+
 const app = express();
 
-// Enable Cross-Origin Resource Sharing
+// Secure express app by setting various HTTP headers
+app.use(helmet());
+
+// Configure CORS origin policy using environment variables
+const allowedOrigins = process.env.ALLOWED_ORIGINS
+  ? process.env.ALLOWED_ORIGINS.split(',').map(o => o.trim())
+  : ['http://localhost:5173', 'http://localhost:5000', 'http://127.0.0.1:5173'];
+
 app.use(cors({
-  origin: '*', // For development, allow any origin to connect
+  origin: (origin, callback) => {
+    // Allow requests with no origin (like mobile apps, curl, or gateway requests)
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.indexOf(origin) !== -1 || process.env.NODE_ENV === 'development') {
+      return callback(null, true);
+    }
+    return callback(new Error('Blocked by CORS policy: Origin not allowed'));
+  },
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'x-api-key']
 }));
