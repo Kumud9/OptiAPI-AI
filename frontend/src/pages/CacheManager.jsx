@@ -183,13 +183,13 @@ const CacheManager = () => {
                     </button>
                   </div>
                   <div className="p-2.5 rounded-xl bg-zinc-900 border border-zinc-800 text-xs text-zinc-300 font-mono break-all">
-                    {GATEWAY_INTEGRATIONS[provider]?.endpoint.replace('{model}', provider === 'gemini' ? selectedGeminiModel : '')}
+                    {GATEWAY_INTEGRATIONS[provider]?.endpoint.replace('{model}', GATEWAY_INTEGRATIONS[provider]?.requiresModel ? selectedGeminiModel : '')}
                   </div>
                 </div>
 
-                {provider === 'gemini' && (
+                {GATEWAY_INTEGRATIONS[provider]?.requiresModel && (
                   <div>
-                    <label className="block text-xs font-semibold text-zinc-400 mb-1.5">Gemini Target Model</label>
+                    <label className="block text-xs font-semibold text-zinc-400 mb-1.5">{GATEWAY_INTEGRATIONS[provider]?.name} Target Model</label>
                     <select
                       value={selectedGeminiModel}
                       onChange={(e) => setSelectedGeminiModel(e.target.value)}

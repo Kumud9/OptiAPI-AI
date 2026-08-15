@@ -2,7 +2,8 @@ export const DEFAULT_GEMINI_MODELS = [
   "gemini-1.5-flash",
   "gemini-1.5-pro",
   "gemini-2.0-flash",
-  "gemini-2.0-pro"
+  "gemini-2.0-pro",
+  "gemini-3.6-flash"
 ];
 
 export const GATEWAY_INTEGRATIONS = {
@@ -19,6 +20,7 @@ export const GATEWAY_INTEGRATIONS = {
     name: "Gemini",
     endpoint: "/gemini/v1/models/{model}:generateContent",
     method: "POST",
+    requiresModel: true,
     body: {
       contents: [{ parts: [{ text: "Hello from OptiAPI!" }] }]
     }
