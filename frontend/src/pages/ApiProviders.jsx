@@ -1,13 +1,88 @@
 import React, { useState, useEffect } from 'react';
 import api from '../services/api';
 import { useToast } from '../context/ToastContext';
-import { KeyRound, Plus, Trash2, Key, Loader2, Sparkles } from 'lucide-react';
+import { KeyRound, Plus, Trash2, Key, Loader2, Sparkles, Terminal, Copy, Check, Code, Globe, HelpCircle } from 'lucide-react';
+
+const GATEWAY_INTEGRATIONS = {
+  openai: {
+    name: "OpenAI",
+    endpoint: "/openai/v1/chat/completions",
+    method: "POST",
+    body: {
+      model: "gpt-4",
+      messages: [{ role: "user", content: "Hello from OptiAPI!" }]
+    }
+  },
+  gemini: {
+    name: "Gemini",
+    endpoint: "/gemini/v1/models/gemini-1.5-flash:generateContent",
+    method: "POST",
+    body: {
+      contents: [{ parts: [{ text: "Hello from OptiAPI!" }] }]
+    }
+  },
+  anthropic: {
+    name: "Claude (Anthropic)",
+    endpoint: "/anthropic/v1/messages",
+    method: "POST",
+    body: {
+      model: "claude-3-sonnet-20240229",
+      max_tokens: 1024,
+      messages: [{ role: "user", content: "Hello from OptiAPI!" }]
+    }
+  },
+  stripe: {
+    name: "Stripe Payments",
+    endpoint: "/stripe/v1/charges",
+    method: "POST",
+    body: {
+      amount: 2000,
+      currency: "usd",
+      source: "tok_visa"
+    }
+  },
+  google_maps: {
+    name: "Google Maps APIs",
+    endpoint: "/google_maps/maps/api/geocode/json?address=1600+Amphitheatre+Parkway",
+    method: "GET",
+    body: null
+  },
+  twilio: {
+    name: "Twilio Messaging",
+    endpoint: "/twilio/2010-04-01/Accounts/AC123/Messages.json",
+    method: "POST",
+    body: {
+      To: "+1234567890",
+      From: "+0987654321",
+      Body: "Hello from OptiAPI!"
+    }
+  },
+  weather: {
+    name: "Weather API",
+    endpoint: "/weather/v1/current.json?q=London",
+    method: "GET",
+    body: null
+  },
+  custom: {
+    name: "Custom REST Endpoints",
+    endpoint: "/custom/api/v1/your-resource",
+    method: "POST",
+    body: {
+      data: "your-payload"
+    }
+  }
+};
 
 const ApiProviders = () => {
   const { addToast } = useToast();
   const [loading, setLoading] = useState(true);
   const [keys, setKeys] = useState([]);
+  const [apiKeys, setApiKeys] = useState([]);
   const [saving, setSaving] = useState(false);
+
+  // Integration helper tab
+  const [selectedIntProvider, setSelectedIntProvider] = useState('openai');
+  const [copiedText, setCopiedText] = useState('');
 
   // Form states
   const [provider, setProvider] = useState('openai');
@@ -29,8 +104,20 @@ const ApiProviders = () => {
     }
   };
 
+  const fetchGatewayKeys = async () => {
+    try {
+      const response = await api.get('/users/keys');
+      if (response.data.success) {
+        setApiKeys(response.data.data);
+      }
+    } catch (error) {
+      console.error('Fetch gateway keys failed:', error);
+    }
+  };
+
   useEffect(() => {
     fetchKeys();
+    fetchGatewayKeys();
   }, []);
 
   const handleSaveKey = async (e) => {
@@ -70,6 +157,41 @@ const ApiProviders = () => {
       addToast('Failed to remove provider credentials', 'error');
     }
   };
+
+  const handleCopyToClipboard = (text, type) => {
+    navigator.clipboard.writeText(text);
+    setCopiedText(type);
+    addToast(`${type} copied to clipboard!`, 'info');
+    setTimeout(() => setCopiedText(''), 2000);
+  };
+
+  // Determine gateway root URL
+  const backendBaseUrl = api.defaults.baseURL || 'http://localhost:5000/api/v1';
+  const productionGatewayRoot = `${backendBaseUrl}/gateway`;
+
+  // Get active gateway key
+  const activeGatewayKey = apiKeys.find(k => k.isActive)?.key || 'YOUR_OPTI_API_KEY';
+  const activeGatewayKeyName = apiKeys.find(k => k.isActive)?.name || 'default';
+
+  const selectedIntegration = GATEWAY_INTEGRATIONS[selectedIntProvider];
+  const fullGatewayUrl = `${productionGatewayRoot}${selectedIntegration.endpoint}`;
+
+  // Generated code snippets
+  const curlSnippet = `curl -X ${selectedIntegration.method} "${fullGatewayUrl}" \\
+  -H "Content-Type: application/json" \\
+  -H "x-api-key: ${activeGatewayKey}" ${selectedIntegration.body ? `\\
+  -d '${JSON.stringify(selectedIntegration.body, null, 2)}'` : ''}`;
+
+  const jsSnippet = `fetch("${fullGatewayUrl}", {
+  method: "${selectedIntegration.method}",
+  headers: {
+    "Content-Type": "application/json",
+    "x-api-key": "${activeGatewayKey}"
+  }${selectedIntegration.body ? `,
+  body: JSON.stringify(${JSON.stringify(selectedIntegration.body, null, 2).replace(/\n/g, '\n  ')})` : ''}
+})
+.then(res => res.json())
+.then(data => console.log(data));`;
 
   return (
     <div className="space-y-6">
@@ -197,6 +319,141 @@ const ApiProviders = () => {
 
       </div>
 
+      {/* API Gateway Integration Panel */}
+      <div className="p-6 rounded-2xl border border-zinc-800 bg-zinc-950/40 glass-card">
+        <div className="flex items-center gap-2 mb-4">
+          <Terminal size={18} className="text-primary-light" />
+          <h2 className="text-base font-bold text-zinc-200">How to use OptiAPI Gateway</h2>
+        </div>
+        <p className="text-xs text-zinc-400 mb-6">
+          OptiAPI provides a single control endpoint for all your integrations. Select a provider below to generate your production URL, headers, and code samples automatically.
+        </p>
+
+        {/* Tab Headers */}
+        <div className="flex flex-wrap gap-2 mb-6 border-b border-zinc-800/60 pb-3">
+          {Object.keys(GATEWAY_INTEGRATIONS).map((provKey) => (
+            <button
+              key={provKey}
+              onClick={() => setSelectedIntProvider(provKey)}
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                selectedIntProvider === provKey
+                  ? 'bg-primary text-white shadow-glow-blue'
+                  : 'bg-zinc-900 text-zinc-400 hover:text-zinc-200'
+              }`}
+            >
+              {GATEWAY_INTEGRATIONS[provKey].name}
+            </button>
+          ))}
+        </div>
+
+        {/* Dynamic Integration Spec */}
+        <div className="grid lg:grid-cols-12 gap-6">
+          <div className="lg:col-span-5 space-y-4">
+            <div className="p-4 rounded-xl bg-zinc-900/30 border border-zinc-850 space-y-3">
+              <div className="flex justify-between items-center text-xs">
+                <span className="font-semibold text-zinc-400">Gateway URL:</span>
+                <span className="px-2 py-0.5 rounded font-mono text-[10px] bg-primary/10 text-primary-light border border-primary/20">
+                  {selectedIntegration.method}
+                </span>
+              </div>
+              <div className="p-3 rounded-lg bg-zinc-950 border border-zinc-900 flex items-center justify-between gap-3">
+                <code className="text-xs font-mono text-zinc-300 break-all select-all">{fullGatewayUrl}</code>
+                <button
+                  onClick={() => handleCopyToClipboard(fullGatewayUrl, 'URL')}
+                  className="p-1 rounded bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-zinc-200 transition-all shrink-0"
+                >
+                  {copiedText === 'URL' ? <Check size={12} className="text-emerald-400" /> : <Copy size={12} />}
+                </button>
+              </div>
+
+              <div className="text-xs space-y-1.5 pt-2">
+                <div className="flex justify-between">
+                  <span className="text-zinc-500">HTTP Method:</span>
+                  <span className="font-mono text-zinc-300">{selectedIntegration.method}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-zinc-500">CORS Policy:</span>
+                  <span className="text-zinc-300">Origin-checked (Default allowed)</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-zinc-500">Telemetry Status:</span>
+                  <span className="text-emerald-400 flex items-center gap-1 font-semibold">
+                    <Globe size={12} /> Active Analytics
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Gateway Key Header Panel */}
+            <div className="p-4 rounded-xl bg-zinc-900/30 border border-zinc-850">
+              <span className="block text-xs font-semibold text-zinc-400 mb-2">Required Headers:</span>
+              <div className="space-y-2 text-xs">
+                <div className="flex justify-between p-2 rounded bg-zinc-950 border border-zinc-900 font-mono">
+                  <span className="text-zinc-500">Content-Type</span>
+                  <span className="text-zinc-300">application/json</span>
+                </div>
+                <div className="p-2 rounded bg-zinc-950 border border-zinc-900 space-y-1.5">
+                  <div className="flex justify-between items-center">
+                    <span className="font-mono text-zinc-500">x-api-key</span>
+                    <button
+                      onClick={() => handleCopyToClipboard(activeGatewayKey, 'Key')}
+                      className="text-zinc-400 hover:text-zinc-200 transition-all"
+                    >
+                      {copiedText === 'Key' ? <Check size={12} className="text-emerald-400" /> : <Copy size={12} />}
+                    </button>
+                  </div>
+                  <div className="text-[10px] font-mono text-zinc-400 break-all select-all">
+                    {activeGatewayKey.substring(0, 15)}... (via {activeGatewayKeyName})
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Dynamic Code Samples */}
+          <div className="lg:col-span-7 space-y-4">
+            <div>
+              <div className="flex justify-between items-center mb-2">
+                <span className="text-xs font-semibold text-zinc-400 flex items-center gap-1.5">
+                  <Code size={14} className="text-primary-light" /> Request Snippets
+                </span>
+              </div>
+
+              {/* cURL Codebox */}
+              <div className="rounded-xl border border-zinc-850 bg-zinc-950 overflow-hidden font-mono text-[11px] text-zinc-300">
+                <div className="flex justify-between items-center px-4 py-2 bg-zinc-900 border-b border-zinc-850">
+                  <span className="text-xs text-zinc-500 font-sans">cURL Sample</span>
+                  <button
+                    onClick={() => handleCopyToClipboard(curlSnippet, 'cURL')}
+                    className="p-1 rounded hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200 transition-all"
+                  >
+                    {copiedText === 'cURL' ? <Check size={12} className="text-emerald-400" /> : <Copy size={12} />}
+                  </button>
+                </div>
+                <pre className="p-4 overflow-x-auto whitespace-pre-wrap select-all max-h-40 leading-relaxed break-all">
+                  {curlSnippet}
+                </pre>
+              </div>
+            </div>
+
+            {/* JavaScript Fetch Codebox */}
+            <div className="rounded-xl border border-zinc-850 bg-zinc-950 overflow-hidden font-mono text-[11px] text-zinc-300">
+              <div className="flex justify-between items-center px-4 py-2 bg-zinc-900 border-b border-zinc-850">
+                <span className="text-xs text-zinc-500 font-sans">JavaScript fetch</span>
+                <button
+                  onClick={() => handleCopyToClipboard(jsSnippet, 'JS')}
+                  className="p-1 rounded hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200 transition-all"
+                >
+                  {copiedText === 'JS' ? <Check size={12} className="text-emerald-400" /> : <Copy size={12} />}
+                </button>
+              </div>
+              <pre className="p-4 overflow-x-auto whitespace-pre-wrap select-all max-h-40 leading-relaxed">
+                {jsSnippet}
+              </pre>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   );
 };
