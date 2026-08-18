@@ -45,7 +45,16 @@ const admin = (req, res, next) => {
  * Middleware to authenticate API Gateway client requests using client API key header
  */
 const verifyGatewayKey = async (req, res, next) => {
-  const apiKey = req.header('x-api-key');
+  // Retrieve apiKey case-insensitively from req.headers or via req.header() helper
+  let apiKey = req.header('x-api-key');
+
+  if (!apiKey && req.headers) {
+    const target = 'x-api-key';
+    const match = Object.keys(req.headers).find(k => k.toLowerCase() === target);
+    if (match) {
+      apiKey = req.headers[match];
+    }
+  }
 
   if (!apiKey) {
     return res.status(401).json({ success: false, error: 'Gateway access denied, x-api-key header missing' });

@@ -83,7 +83,10 @@ function calculateRecommendation(metrics, mode = 'balanced', providersFilter = n
       model: c.model,
       endpoint: c.endpoint,
       score: finalScore,
-      confidence
+      confidence,
+      costScore,
+      latencyScore,
+      reliabilityScore
     };
   });
 
@@ -107,8 +110,20 @@ function calculateRecommendation(metrics, mode = 'balanced', providersFilter = n
  * @returns {Promise<object|null>}
  */
 async function getRecommendationForUser(userId, mode = 'balanced', providersFilter = null) {
+  const { getEligibleCandidates } = require('./providerEligibilityService');
+  const { eligible } = await getEligibleCandidates(userId);
+
   const metrics = await getHistoricalMetricsForUser(userId);
-  return calculateRecommendation(metrics, mode, providersFilter);
+
+  let eligibleMetrics = metrics.filter(m =>
+    eligible.some(el => el.provider === m.provider && el.model === m.model)
+  );
+
+  if (providersFilter && Array.isArray(providersFilter)) {
+    eligibleMetrics = eligibleMetrics.filter(m => providersFilter.includes(m.provider));
+  }
+
+  return calculateRecommendation(eligibleMetrics, mode);
 }
 
 module.exports = {

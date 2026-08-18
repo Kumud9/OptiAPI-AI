@@ -17,12 +17,23 @@ const handleGatewayRequest = async (req, res) => {
   const apiKeyId = req.gatewayKey ? req.gatewayKey._id : null;
   const startTime = Date.now();
 
+  const originalRequestedProvider = provider;
+  const originalRequestedModel = body ? body.model : null;
+
   // Optimization logic integration
   const optimizationEnabled = process.env.OPTIMIZATION_ENABLED === 'true';
+  const optimizationExecutionMode = process.env.OPTIMIZATION_MODE || 'recommendation'; // 'recommendation' or 'automatic'
   let selectedProvider = provider;
-  let selectedModel = null;
+  let selectedModel = body ? body.model : null;
   let routingEndpoint = endpoint;
   let optimizationUsed = false;
+
+  let recommendedProvider = null;
+  let recommendedModel = null;
+  let recommendationScore = null;
+  let costScore = null;
+  let latencyScore = null;
+  let reliabilityScore = null;
   
   req.query = req.query || {};
   req.headers = req.headers || {};
@@ -31,7 +42,7 @@ const handleGatewayRequest = async (req, res) => {
   if (optimizationEnabled && (provider === 'openai' || provider === 'gemini' || provider === 'anthropic')) {
     try {
       const { getOptimizationDecision } = require('../services/optimizationDecisionService');
-      const decisionResult = await getOptimizationDecision(userId, mode);
+      const decisionResult = await getOptimizationDecision(userId, mode, { provider, endpoint, body });
       if (decisionResult && decisionResult.success && decisionResult.decision) {
         const { provider: recProvider, model: recModel, endpoint: recEndpoint } = decisionResult.decision;
         const successfulRequests = decisionResult.metrics?.successfulRequests;
@@ -42,97 +53,132 @@ const handleGatewayRequest = async (req, res) => {
         const hasMinSuccessfulRequests = typeof successfulRequests === 'number' && successfulRequests >= 5;
 
         if (isSupportedProvider && hasModelAndEndpoint && hasMinSuccessfulRequests) {
-          selectedProvider = recProvider;
-          selectedModel = recModel;
-          optimizationUsed = true;
-          
-          if (selectedProvider === 'openai' || selectedProvider === 'anthropic') {
+          recommendedProvider = recProvider;
+          recommendedModel = recModel;
+          recommendationScore = decisionResult.decision.score || null;
+          costScore = decisionResult.decision.costScore || null;
+          latencyScore = decisionResult.decision.latencyScore || null;
+          reliabilityScore = decisionResult.decision.reliabilityScore || null;
+
+          if (optimizationExecutionMode === 'automatic') {
+            selectedProvider = recProvider;
+            selectedModel = recModel;
+            optimizationUsed = true;
+            
             req.body = req.body || {};
             req.body.model = selectedModel;
-            routingEndpoint = recEndpoint;
-          } else if (selectedProvider === 'gemini') {
-            routingEndpoint = recEndpoint.replace(/\/models\/([^/:]+)/, `/models/${selectedModel}`);
-          }
-          logger.info(`Optimization active: routed request to provider [${selectedProvider.toUpperCase()}] model [${selectedModel}]`);
 
-          // Re-evaluate cache for the new routed endpoint/provider
-          if (selectedProvider !== provider || routingEndpoint !== endpoint) {
-            try {
-              const CacheRule = require('../models/CacheRule');
-              const rule = await CacheRule.findOne({
-                userId,
-                provider: selectedProvider.toLowerCase(),
-                endpoint: routingEndpoint.toLowerCase(),
-                isActive: true
-              });
-
-              if (rule) {
-                req.cacheRule = rule;
-                const crypto = require('crypto');
-                const bodyStr = JSON.stringify(req.body || {});
-                const queryStr = JSON.stringify(req.query || {});
-                const requestHash = crypto.createHash('sha256')
-                  .update(bodyStr + queryStr)
-                  .digest('hex');
-
-                const cacheKey = `apicache:${userId}:${selectedProvider}:${routingEndpoint}:${requestHash}`;
-                req.cacheKey = cacheKey;
-
-                const redis = getRedisClient();
-                const cachedResponse = await redis.get(cacheKey);
-
-                if (cachedResponse) {
-                  logger.info(`Cache HIT on gateway after optimization routing: [${selectedProvider.toUpperCase()}] ${routingEndpoint}`);
-                  req.cacheStatus = 'HIT';
-                  
-                  const parsedData = JSON.parse(cachedResponse);
-                  
-                  res.setHeader('X-OptiAPI-Cache', 'HIT');
-                  res.setHeader('X-OptiAPI-TTL', rule.ttlSeconds);
-                  res.setHeader('X-OptiAPI-Cost', '0.00000000');
-                  res.setHeader('X-OptiAPI-Time', '2ms');
-
-                  req.optimization = {
-                    optimizationEnabled,
-                    optimizationSelectedProvider: selectedProvider,
-                    optimizationSelectedModel: selectedModel,
-                    optimizationMode: mode,
-                    optimizationUsed
-                  };
-
-                  RequestLog.create({
-                    userId,
-                    apiKeyId,
-                    provider: selectedProvider,
-                    model: selectedModel,
-                    endpoint: routingEndpoint,
-                    method,
-                    status: 200,
-                    responseTimeMs: 2,
-                    costUsd: 0.0,
-                    tokensUsed: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
-                    cacheStatus: 'HIT',
-                    requestBody: JSON.stringify(req.body || {}),
-                    responseBody: cachedResponse,
-                    optimizationEnabled,
-                    optimizationUsed,
-                    optimizationMode: mode,
-                    optimizationSelectedProvider: selectedProvider,
-                    optimizationSelectedModel: selectedModel
-                  }).catch(err => logger.error(`Failed to log cache HIT: ${err.message}`));
-
-                  return res.status(200).json(parsedData);
-                } else {
-                  req.cacheStatus = 'MISS';
-                }
-              } else {
-                req.cacheRule = null;
-                req.cacheKey = null;
-                req.cacheStatus = 'BYPASS';
-              }
-            } catch (cacheErr) {
-              logger.error(`Cache lookup failed during optimization routing: ${cacheErr.message}`);
+            if (selectedProvider === 'openai' || selectedProvider === 'anthropic') {
+              routingEndpoint = recEndpoint;
+            } else if (selectedProvider === 'gemini') {
+              routingEndpoint = recEndpoint.replace(/\/models\/([^/:]+)/, `/models/${selectedModel}`);
             }
+            logger.info(`Optimization active (automatic mode): routed request to provider [${selectedProvider.toUpperCase()}] model [${selectedModel}]`);
+
+            // Re-evaluate cache for the new routed endpoint/provider in automatic mode
+            const normalizedRoutingEndpoint = normalizeEndpoint(routingEndpoint).toLowerCase();
+            if (selectedProvider.toLowerCase() !== provider.toLowerCase() || normalizedRoutingEndpoint !== endpoint.toLowerCase()) {
+              try {
+                const CacheRule = require('../models/CacheRule');
+                const rule = await CacheRule.findOne({
+                  userId,
+                  provider: selectedProvider.toLowerCase(),
+                  endpoint: normalizedRoutingEndpoint,
+                  isActive: true
+                });
+
+                if (rule) {
+                  req.cacheRule = rule;
+                  const crypto = require('crypto');
+                  const bodyStr = JSON.stringify(req.body || {});
+                  const queryStr = JSON.stringify(req.query || {});
+                  const requestHash = crypto.createHash('sha256')
+                    .update(bodyStr + queryStr)
+                    .digest('hex');
+
+                  const cacheKey = `apicache:${userId}:${selectedProvider.toLowerCase()}:${normalizedRoutingEndpoint}:${requestHash}`;
+                  req.cacheKey = cacheKey;
+
+                  const redis = getRedisClient();
+                  const cachedResponse = await redis.get(cacheKey);
+
+                  if (cachedResponse) {
+                    logger.info(`Cache HIT on gateway after optimization routing: [${selectedProvider.toUpperCase()}] ${normalizedRoutingEndpoint}`);
+                    req.cacheStatus = 'HIT';
+                    
+                    const parsedData = JSON.parse(cachedResponse);
+                    
+                    res.setHeader('X-OptiAPI-Cache', 'HIT');
+                    res.setHeader('X-OptiAPI-TTL', rule.ttlSeconds);
+                    res.setHeader('X-OptiAPI-Cost', '0.00000000');
+                    res.setHeader('X-OptiAPI-Time', '2ms');
+
+                    req.optimization = {
+                      optimizationEnabled,
+                      optimizationSelectedProvider: selectedProvider,
+                      optimizationSelectedModel: selectedModel,
+                      optimizationMode: mode,
+                      optimizationUsed,
+                      requestedProvider: originalRequestedProvider,
+                      requestedModel: originalRequestedModel,
+                      recommendedProvider,
+                      recommendedModel,
+                      recommendationScore,
+                      costScore,
+                      latencyScore,
+                      reliabilityScore,
+                      actualProvider: selectedProvider,
+                      actualModel: selectedModel,
+                      routedProvider: selectedProvider
+                    };
+
+                    RequestLog.create({
+                      userId,
+                      apiKeyId,
+                      provider: selectedProvider,
+                      model: selectedModel,
+                      endpoint: routingEndpoint,
+                      method,
+                      status: 200,
+                      responseTimeMs: 2,
+                      costUsd: 0.0,
+                      tokensUsed: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+                      cacheStatus: 'HIT',
+                      requestBody: JSON.stringify(req.body || {}),
+                      responseBody: cachedResponse,
+                      optimizationEnabled,
+                      optimizationUsed,
+                      optimizationMode: mode,
+                      optimizationSelectedProvider: selectedProvider,
+                      optimizationSelectedModel: selectedModel,
+                      requestedProvider: originalRequestedProvider,
+                      requestedModel: originalRequestedModel,
+                      recommendedProvider,
+                      recommendedModel,
+                      recommendationScore,
+                      costScore,
+                      latencyScore,
+                      reliabilityScore,
+                      actualProvider: selectedProvider,
+                      actualModel: selectedModel,
+                      routedProvider: selectedProvider
+                    }).catch(err => logger.error(`Failed to log cache HIT: ${err.message}`));
+
+                    return res.status(200).json(parsedData);
+                  } else {
+                    req.cacheStatus = 'MISS';
+                  }
+                } else {
+                  req.cacheRule = null;
+                  req.cacheKey = null;
+                  req.cacheStatus = 'BYPASS';
+                }
+              } catch (cacheErr) {
+                logger.error(`Cache lookup failed during optimization routing: ${cacheErr.message}`);
+              }
+            }
+          } else {
+            logger.info(`Optimization recommendation computed (recommendation mode): recommended [${recProvider.toUpperCase()}] model [${recModel}], executing requested [${provider.toUpperCase()}]`);
           }
         }
       }
@@ -147,7 +193,18 @@ const handleGatewayRequest = async (req, res) => {
     optimizationSelectedProvider: selectedProvider,
     optimizationSelectedModel: selectedModel,
     optimizationMode: mode,
-    optimizationUsed
+    optimizationUsed,
+    requestedProvider: originalRequestedProvider,
+    requestedModel: originalRequestedModel,
+    recommendedProvider,
+    recommendedModel,
+    recommendationScore,
+    costScore,
+    latencyScore,
+    reliabilityScore,
+    actualProvider: selectedProvider,
+    actualModel: selectedModel,
+    routedProvider: selectedProvider
   };
 
   // 1. Heavy Traffic Queueing simulation trigger
@@ -159,7 +216,20 @@ const handleGatewayRequest = async (req, res) => {
       endpoint: routingEndpoint,
       method,
       body: req.body,
-      timestamp: Date.now()
+      timestamp: Date.now(),
+      requestedProvider: originalRequestedProvider,
+      requestedModel: originalRequestedModel,
+      recommendedProvider,
+      recommendedModel,
+      recommendationScore,
+      costScore,
+      latencyScore,
+      reliabilityScore,
+      actualProvider: selectedProvider,
+      actualModel: selectedModel,
+      routedProvider: selectedProvider,
+      inputProvider: originalRequestedProvider,
+      inputModel: originalRequestedModel
     };
 
     await publishToQueue('gateway_requests', queuePayload);
@@ -182,12 +252,17 @@ const handleGatewayRequest = async (req, res) => {
   while (attempts < maxAttempts && !requestSucceeded) {
     try {
       attempts++;
-      apiResponse = await externalApiService.simulateApiCall(selectedProvider, routingEndpoint, method, req.body, headers, userId);
+      apiResponse = await externalApiService.simulateApiCall(selectedProvider, routingEndpoint, method, req.body, headers, userId, provider);
       requestSucceeded = true;
     } catch (err) {
       errorDetail = err.message;
       logger.warn(`Gateway router attempt ${attempts}/${maxAttempts} failed for provider [${selectedProvider.toUpperCase()}] ${routingEndpoint}: ${errorDetail}`);
       
+      // Do not retry deterministic schema or configuration errors, or explicit non-retryable errors
+      if (err.shouldRetry === false || err.message.includes('CapabilityError') || err.message.includes('ConfigurationError') || err.message.includes('ValidationError')) {
+        break;
+      }
+
       if (attempts < maxAttempts) {
         const delay = Math.pow(2, attempts) * 100;
         await new Promise(resolve => setTimeout(resolve, delay));
@@ -221,7 +296,20 @@ const handleGatewayRequest = async (req, res) => {
       optimizationUsed: req.optimization?.optimizationUsed || false,
       optimizationMode: req.optimization?.optimizationMode || null,
       optimizationSelectedProvider: req.optimization?.optimizationSelectedProvider || null,
-      optimizationSelectedModel: req.optimization?.optimizationSelectedModel || null
+      optimizationSelectedModel: req.optimization?.optimizationSelectedModel || null,
+      requestedProvider: originalRequestedProvider,
+      requestedModel: originalRequestedModel,
+      recommendedProvider,
+      recommendedModel,
+      recommendationScore,
+      costScore,
+      latencyScore,
+      reliabilityScore,
+      actualProvider: selectedProvider,
+      actualModel: resolvedModel,
+      routedProvider: selectedProvider,
+      inputProvider: originalRequestedProvider,
+      inputModel: originalRequestedModel
     }).catch(err => logger.error(`Failed to create RequestLog in MongoDB: ${err.message}`));
 
     if (req.cacheKey && req.cacheRule) {
@@ -259,7 +347,20 @@ const handleGatewayRequest = async (req, res) => {
     optimizationUsed: req.optimization?.optimizationUsed || false,
     optimizationMode: req.optimization?.optimizationMode || null,
     optimizationSelectedProvider: req.optimization?.optimizationSelectedProvider || null,
-    optimizationSelectedModel: req.optimization?.optimizationSelectedModel || null
+    optimizationSelectedModel: req.optimization?.optimizationSelectedModel || null,
+    requestedProvider: originalRequestedProvider,
+    requestedModel: originalRequestedModel,
+    recommendedProvider,
+    recommendedModel,
+    recommendationScore,
+    costScore,
+    latencyScore,
+    reliabilityScore,
+    actualProvider: selectedProvider,
+    actualModel: originalRequestedModel,
+    routedProvider: selectedProvider,
+    inputProvider: originalRequestedProvider,
+    inputModel: originalRequestedModel
   }).catch(err => logger.error(`Failed to log error log in MongoDB: ${err.message}`));
 
   return res.status(502).json({

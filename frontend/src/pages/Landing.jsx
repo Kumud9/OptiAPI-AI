@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import Hero from '../components/landing/Hero';
+import FlowPipeline from '../components/landing/FlowPipeline';
 import { 
   Zap, 
   Coins, 
@@ -19,6 +20,15 @@ import {
 } from 'lucide-react';
 
 const Landing = () => {
+  const [activeProblemCard, setActiveProblemCard] = useState(0);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setActiveProblemCard((prev) => (prev + 1) % 3);
+    }, 3000);
+    return () => clearInterval(interval);
+  }, []);
+
   return (
     <div className="bg-background text-zinc-100 min-h-screen">
       
@@ -27,7 +37,7 @@ const Landing = () => {
         <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Zap className="text-primary h-6 w-6" />
-            <span className="text-lg font-bold tracking-tight">OptiAPI <span className="text-primary">AI</span></span>
+            <span className="text-lg font-bold tracking-tight">OptiAPI</span>
           </div>
           <nav className="hidden md:flex items-center gap-8 text-sm font-medium text-zinc-400">
             <a href="#features" className="hover:text-zinc-200 transition-colors">Features</a>
@@ -56,30 +66,47 @@ const Landing = () => {
               The Secret Problem: Uncontrolled API Costs
             </h2>
             <p className="text-zinc-400">
-              Modern applications consume hundreds of API endpoints. AI LLM tokens, geocoding maps queries, and payment webhooks run up heavy monthly invoices from duplicate requests and un-cached response payloads.
+              Modern applications consume hundreds of API endpoints. LLM tokens, geocoding maps queries, and payment webhooks run up heavy monthly invoices from duplicate requests and un-cached response payloads.
             </p>
           </div>
           
           <div className="grid md:grid-cols-3 gap-8">
-            <div className="p-8 rounded-2xl border border-zinc-900 bg-zinc-900/20 text-center">
-              <Coins className="text-rose-500 mx-auto h-8 w-8 mb-4" />
-              <h3 className="text-lg font-bold mb-2">Duplicate Queries</h3>
+            {/* Duplicate Queries */}
+            <div className={`p-8 rounded-2xl border transition-all duration-700 text-center ${
+              activeProblemCard === 0
+                ? 'border-rose-500/40 bg-rose-950/15 scale-[1.04] shadow-[0_0_30px_-5px_rgba(244,63,94,0.3)]'
+                : 'border-zinc-900 bg-zinc-900/20 opacity-70'
+            }`}>
+              <Coins className={`mx-auto h-8 w-8 mb-4 transition-transform duration-700 ${activeProblemCard === 0 ? 'text-rose-400 scale-110' : 'text-rose-500/60'}`} />
+              <h3 className={`text-lg font-bold mb-2 transition-colors duration-700 ${activeProblemCard === 0 ? 'text-rose-300' : 'text-zinc-200'}`}>Duplicate Queries</h3>
               <p className="text-sm text-zinc-400">
                 Up to 28% of LLM queries and data fetches request identical inputs within 30 minutes, burning cash for zero value.
               </p>
             </div>
-            <div className="p-8 rounded-2xl border border-zinc-900 bg-zinc-900/20 text-center">
-              <Activity className="text-amber-500 mx-auto h-8 w-8 mb-4" />
-              <h3 className="text-lg font-bold mb-2">High Latency Rates</h3>
+
+            {/* High Latency Rates */}
+            <div className={`p-8 rounded-2xl border transition-all duration-700 text-center ${
+              activeProblemCard === 1
+                ? 'border-amber-500/40 bg-amber-950/15 scale-[1.04] shadow-[0_0_30px_-5px_rgba(245,158,11,0.3)]'
+                : 'border-zinc-900 bg-zinc-900/20 opacity-70'
+            }`}>
+              <Activity className={`mx-auto h-8 w-8 mb-4 transition-transform duration-700 ${activeProblemCard === 1 ? 'text-amber-400 scale-110' : 'text-amber-500/60'}`} />
+              <h3 className={`text-lg font-bold mb-2 transition-colors duration-700 ${activeProblemCard === 1 ? 'text-amber-300' : 'text-zinc-200'}`}>High Latency Rates</h3>
               <p className="text-sm text-zinc-400">
                 Direct external integrations slow down clients due to network hops. Caching speeds response latency by up to 98%.
               </p>
             </div>
-            <div className="p-8 rounded-2xl border border-zinc-900 bg-zinc-900/20 text-center">
-              <TrendingDown className="text-emerald-500 mx-auto h-8 w-8 mb-4" />
-              <h3 className="text-lg font-bold mb-2">AI Cost Spikes</h3>
+
+            {/* Cost Spikes */}
+            <div className={`p-8 rounded-2xl border transition-all duration-700 text-center ${
+              activeProblemCard === 2
+                ? 'border-emerald-500/40 bg-emerald-950/15 scale-[1.04] shadow-[0_0_30px_-5px_rgba(16,185,129,0.3)]'
+                : 'border-zinc-900 bg-zinc-900/20 opacity-70'
+            }`}>
+              <TrendingDown className={`mx-auto h-8 w-8 mb-4 transition-transform duration-700 ${activeProblemCard === 2 ? 'text-emerald-400 scale-110' : 'text-emerald-500/60'}`} />
+              <h3 className={`text-lg font-bold mb-2 transition-colors duration-700 ${activeProblemCard === 2 ? 'text-emerald-300' : 'text-zinc-200'}`}>Cost Spikes</h3>
               <p className="text-sm text-zinc-400">
-                Unstructured AI prompts create cost unpredictability, resulting in sudden monthly billing shock.
+                Unstructured API prompts create cost unpredictability, resulting in sudden monthly billing shock.
               </p>
             </div>
           </div>
@@ -91,19 +118,21 @@ const Landing = () => {
         <div className="max-w-7xl mx-auto px-6">
           <div className="text-center mb-16">
             <h2 className="text-2xl sm:text-4xl font-extrabold tracking-tight mb-4">
-              How OptiAPI AI Works
+              How OptiAPI Works
             </h2>
             <p className="text-zinc-400 max-w-xl mx-auto">
               Our intelligent proxy routes requests efficiently, applying layers of optimization at speed.
             </p>
           </div>
 
+          <FlowPipeline />
+
           <div className="grid md:grid-cols-4 gap-8">
             {[
               { step: '01', title: 'Route Request', text: 'Point your code client SDKs to the OptiAPI Gateway proxy URL.' },
               { step: '02', title: 'Cache Inspection', text: 'OptiAPI instantly checks Redis to serve cached duplicates.' },
               { step: '03', title: 'Traffic Routing', text: 'Un-cached queries route to external providers with automatic failover retries.' },
-              { step: '04', title: 'AI Cost Analysis', text: 'Logs save to MongoDB, updating costs and compiling cash saving tips.' }
+              { step: '04', title: 'Cost Analysis', text: 'Logs save to MongoDB, updating costs and compiling cash saving tips.' }
             ].map((item, index) => (
               <div key={index} className="relative p-6 rounded-2xl border border-zinc-800/80 bg-zinc-900/30 glass-card">
                 <span className="absolute -top-4 left-6 text-4xl font-black text-primary/10 select-none">{item.step}</span>
@@ -134,7 +163,7 @@ const Landing = () => {
               { icon: RefreshCcw, title: 'Auto-Retry Mechanisms', text: 'Gateway retries timed-out external provider services with backoff routines.' },
               { icon: Layers, title: 'RabbitMQ Request Queueing', text: 'Spikes queue requests to prevent downstream timeouts or API lockouts.' },
               { icon: Coins, title: 'Granular Cost Calculations', text: 'Real-time pricing analysis per provider, geocodes, and LLM input tokens.' },
-              { icon: Sparkles, title: 'AI Optimization Center', text: 'Get tailored monthly saving tips, with one-click implementation triggers.' }
+              { icon: Sparkles, title: 'Optimization Center', text: 'Get tailored monthly saving tips, with one-click implementation triggers.' }
             ].map((feat, index) => {
               const Icon = feat.icon;
               return (
@@ -213,7 +242,7 @@ const Landing = () => {
                 <tr className="bg-zinc-900/60 text-sm font-bold border-b border-zinc-800">
                   <th className="p-4">Feature</th>
                   <th className="p-4 text-zinc-400">Traditional Gateway</th>
-                  <th className="p-4 text-primary-light">OptiAPI AI</th>
+                  <th className="p-4 text-primary-light">OptiAPI</th>
                 </tr>
               </thead>
               <tbody className="text-xs divide-y divide-zinc-800/40 bg-zinc-950/20">
@@ -339,7 +368,7 @@ const Landing = () => {
                 <div className="h-8 w-8 rounded-full bg-primary flex items-center justify-center font-bold text-xs text-white">AR</div>
                 <div>
                   <h4 className="text-xs font-bold">Alex Rivera</h4>
-                  <p className="text-[10px] text-zinc-500">CTO, NeuroStack AI</p>
+                  <p className="text-[10px] text-zinc-500">CTO, NeuroStack</p>
                 </div>
               </div>
             </div>
@@ -389,10 +418,10 @@ const Landing = () => {
         <div className="max-w-7xl mx-auto px-6 flex flex-col sm:flex-row justify-between items-center gap-6">
           <div className="flex items-center gap-2">
             <Zap className="text-primary h-5 w-5" />
-            <span className="text-sm font-bold tracking-tight">OptiAPI <span className="text-primary">AI</span></span>
+            <span className="text-sm font-bold tracking-tight">OptiAPI</span>
           </div>
           <div className="text-xs text-zinc-500">
-            &copy; 2026 OptiAPI AI Inc. All rights reserved.
+            &copy; 2026 OptiAPI Inc. All rights reserved.
           </div>
           <div className="flex gap-6 text-xs text-zinc-500">
             <a href="#" className="hover:text-zinc-400">Terms</a>

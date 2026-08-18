@@ -2,7 +2,9 @@ const express = require('express');
 const router = express.Router();
 const {
   getRecommendations,
-  applyRecommendation
+  applyRecommendation,
+  getSettings,
+  updateSettings
 } = require('../controllers/optimizationController');
 const { getTelemetryMetrics } = require('../controllers/telemetryController');
 const { getHistoricalMetrics } = require('../controllers/historicalDataController');
@@ -20,6 +22,10 @@ router.route('/recommendations')
 
 router.route('/recommendations/:id/apply')
   .post(validate({ params: schemas.objectIdSchema }), applyRecommendation);
+
+router.route('/settings')
+  .get(getSettings)
+  .post(updateSettings);
 
 // Historical telemetry analysis: per-(provider, model, endpoint) metrics.
 // Read-only. No external API calls. No secrets exposed.

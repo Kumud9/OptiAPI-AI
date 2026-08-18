@@ -60,17 +60,35 @@ const getDecision = async (req, res) => {
   }
 
   try {
-    const decisionResponse = await getOptimizationDecision(userId, mode, providersFilter);
+    const decisionResponse = await getOptimizationDecision(userId, mode, null, providersFilter);
+
+    const RequestLog = require('../models/RequestLog');
+    const lastLog = await RequestLog.findOne({ userId }).sort({ _id: -1 }).lean();
+
+    const context = {
+      requestedProvider: lastLog ? (lastLog.requestedProvider || lastLog.inputProvider || lastLog.provider) : null,
+      requestedModel: lastLog ? (lastLog.requestedModel || lastLog.inputModel || lastLog.model) : null,
+      recommendedProvider: lastLog ? lastLog.recommendedProvider : null,
+      recommendedModel: lastLog ? lastLog.recommendedModel : null,
+      actualProvider: lastLog ? lastLog.provider : null,
+      actualModel: lastLog ? lastLog.model : null,
+      optimizationMode: lastLog ? lastLog.optimizationMode : null,
+      strategy: mode
+    };
 
     if (!decisionResponse) {
       return res.status(200).json({
         success: false,
         code: 'INSUFFICIENT_DATA',
-        message: 'Not enough historical provider data to make a reliable optimization decision.'
+        message: 'Not enough historical provider data to make a reliable optimization decision.',
+        ...context
       });
     }
 
-    return res.status(200).json(decisionResponse);
+    return res.status(200).json({
+      ...decisionResponse,
+      ...context
+    });
   } catch (error) {
     logger.error(`getDecision error for user ${userId}: ${error.message}`);
     return res.status(500).json({

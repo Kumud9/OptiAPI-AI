@@ -6,6 +6,8 @@ const mongoose = require('mongoose');
 
 const User = require('../models/User');
 const RequestLog = require('../models/RequestLog');
+const ProviderKey = require('../models/ProviderKey');
+const ProviderModel = require('../models/ProviderModel');
 const { getOptimizationDecision } = require('../services/optimizationDecisionService');
 
 const mockUserId = '507f1f77bcf86cd799439011';
@@ -46,6 +48,8 @@ function generateMockLogs(openaiCount = 10, geminiCount = 42) {
 // Store original methods
 const originalFindById = User.findById;
 const originalFind = RequestLog.find;
+const originalProviderKeyFind = ProviderKey.find;
+const originalProviderModelFind = ProviderModel.find;
 
 test('Optimization Decision Engine Unit Tests', async (t) => {
 
@@ -68,12 +72,46 @@ test('Optimization Decision Engine Unit Tests', async (t) => {
         lean: async () => generateMockLogs(10, 42)
       };
     };
+
+    // Mock ProviderKey.find and ProviderModel.find to make candidates eligible
+    const keyGeminiId = new mongoose.Types.ObjectId();
+    const keyOpenaiId = new mongoose.Types.ObjectId();
+
+    ProviderKey.find = async (query) => {
+      return [
+        { _id: keyGeminiId, provider: 'gemini', isActive: true, validationStatus: 'connected' },
+        { _id: keyOpenaiId, provider: 'openai', isActive: true, validationStatus: 'connected' }
+      ];
+    };
+
+    ProviderModel.find = async (query) => {
+      return [
+        {
+          userId: mockUserId,
+          providerKeyId: keyGeminiId,
+          provider: 'gemini',
+          externalModelId: 'gemini-3.1-flash-lite',
+          isAvailable: true,
+          capabilities: { text: true }
+        },
+        {
+          userId: mockUserId,
+          providerKeyId: keyOpenaiId,
+          provider: 'openai',
+          externalModelId: 'gpt-4o',
+          isAvailable: true,
+          capabilities: { text: true }
+        }
+      ];
+    };
   });
 
   t.after(() => {
     // Restore original methods
     User.findById = originalFindById;
     RequestLog.find = originalFind;
+    ProviderKey.find = originalProviderKeyFind;
+    ProviderModel.find = originalProviderModelFind;
   });
 
   await t.test('1. Balanced decision', async () => {
@@ -131,7 +169,7 @@ test('Optimization Decision Engine Unit Tests', async (t) => {
       };
     };
 
-    const res = await getOptimizationDecision(mockUserId, 'balanced', ['openai']);
+    const res = await getOptimizationDecision(mockUserId, 'balanced', null, ['openai']);
     assert.ok(res);
     assert.strictEqual(res.decision.provider, 'openai');
     assert.strictEqual(res.decision.model, 'gpt-4o');
@@ -157,11 +195,10 @@ test('Optimization Decision Engine Unit Tests', async (t) => {
       };
     };
     const res = await getOptimizationDecision(mockUserId, 'balanced');
-    assert.deepStrictEqual(res, {
-      success: false,
-      code: 'INSUFFICIENT_DATA',
-      message: 'Not enough historical provider data to make a reliable recommendation.'
-    });
+    assert.ok(res);
+    assert.strictEqual(res.success, false);
+    assert.strictEqual(res.code, 'INSUFFICIENT_DATA');
+    assert.strictEqual(res.message, 'Not enough historical provider data to make a reliable recommendation.');
   });
 
   await t.test('7. Admin data exclusion', async () => {
@@ -171,11 +208,10 @@ test('Optimization Decision Engine Unit Tests', async (t) => {
       };
     };
     const res = await getOptimizationDecision(mockAdminId, 'balanced');
-    assert.deepStrictEqual(res, {
-      success: false,
-      code: 'INSUFFICIENT_DATA',
-      message: 'Not enough historical provider data to make a reliable recommendation.'
-    });
+    assert.ok(res);
+    assert.strictEqual(res.success, false);
+    assert.strictEqual(res.code, 'INSUFFICIENT_DATA');
+    assert.strictEqual(res.message, 'Not enough historical provider data to make a reliable recommendation.');
   });
 
   await t.test('8. Gemini-only eligible candidate', async () => {

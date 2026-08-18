@@ -90,6 +90,58 @@ const RequestLogSchema = new mongoose.Schema({
   optimizationSelectedModel: {
     type: String,
     default: null
+  },
+  requestedProvider: {
+    type: String,
+    default: null
+  },
+  requestedModel: {
+    type: String,
+    default: null
+  },
+  recommendedProvider: {
+    type: String,
+    default: null
+  },
+  recommendedModel: {
+    type: String,
+    default: null
+  },
+  recommendationScore: {
+    type: Number,
+    default: null
+  },
+  costScore: {
+    type: Number,
+    default: null
+  },
+  latencyScore: {
+    type: Number,
+    default: null
+  },
+  reliabilityScore: {
+    type: Number,
+    default: null
+  },
+  actualProvider: {
+    type: String,
+    default: null
+  },
+  actualModel: {
+    type: String,
+    default: null
+  },
+  routedProvider: {
+    type: String,
+    default: null
+  },
+  inputProvider: {
+    type: String,
+    default: null
+  },
+  inputModel: {
+    type: String,
+    default: null
   }
 });
 

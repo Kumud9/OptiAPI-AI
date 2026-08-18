@@ -43,7 +43,12 @@ test('Gateway Optimization Integration Tests - Phase 6B', async (t) => {
   let simulateCallCount = 0;
   let lastSimulateArgs = null;
 
+  let originalEnvMode;
+
   t.before(() => {
+    originalEnvMode = process.env.OPTIMIZATION_MODE;
+    process.env.OPTIMIZATION_MODE = 'automatic';
+
     // Disable DB writes and lookups to prevent buffering timeouts
     RequestLog.create = async () => ({});
     ProviderKey.findOne = async () => null;
@@ -63,6 +68,7 @@ test('Gateway Optimization Integration Tests - Phase 6B', async (t) => {
   });
 
   t.after(() => {
+    process.env.OPTIMIZATION_MODE = originalEnvMode;
     // Restore originals
     optimizationDecisionService.getOptimizationDecision = originalGetOptimizationDecision;
     RequestLog.create = originalRequestLogCreate;
@@ -400,13 +406,11 @@ test('Gateway Optimization Integration Tests - Phase 6B', async (t) => {
 
     await gatewayController.handleGatewayRequest(req, res);
 
-    assert.deepStrictEqual(req.optimization, {
-      optimizationEnabled: true,
-      optimizationSelectedProvider: 'gemini',
-      optimizationSelectedModel: 'gemini-1.5-flash',
-      optimizationMode: 'balanced',
-      optimizationUsed: true
-    });
+    assert.strictEqual(req.optimization.optimizationEnabled, true);
+    assert.strictEqual(req.optimization.optimizationSelectedProvider, 'gemini');
+    assert.strictEqual(req.optimization.optimizationSelectedModel, 'gemini-1.5-flash');
+    assert.strictEqual(req.optimization.optimizationMode, 'balanced');
+    assert.strictEqual(req.optimization.optimizationUsed, true);
   });
 
   await t.test('12. Authenticated user ID is passed to decision engine', async () => {

@@ -41,6 +41,11 @@ const createProviderKeySchema = z.object({
   value: z.string().min(1, 'Please provide the API key value').trim()
 });
 
+const updateProviderKeySchema = z.object({
+  name: z.string().trim().optional(),
+  isActive: z.boolean().optional()
+});
+
 // 4. Cache schemas
 const createCacheRuleSchema = z.object({
   provider: z.string().min(1, 'Please provide a provider name').trim().toLowerCase(),
@@ -351,6 +356,7 @@ module.exports = {
     updateProfileSchema,
     createApiKeySchema,
     createProviderKeySchema,
+    updateProviderKeySchema,
     createCacheRuleSchema,
     getLogsQuerySchema
   }

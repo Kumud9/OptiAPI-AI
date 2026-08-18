@@ -25,6 +25,21 @@ const ProviderKeySchema = new mongoose.Schema({
     type: Boolean,
     default: true
   },
+  validationStatus: {
+    type: String,
+    enum: [
+      'not_configured', 'validating', 'connected', 'validation_failed', 'unavailable',
+      'healthy', 'rate_limited', 'quota_exhausted', 'authentication_failed', 'unknown'
+    ],
+    default: 'not_configured'
+  },
+  lastValidatedAt: {
+    type: Date
+  },
+  validationErrorCode: {
+    type: String,
+    default: null
+  },
   createdAt: {
     type: Date,
     default: Date.now

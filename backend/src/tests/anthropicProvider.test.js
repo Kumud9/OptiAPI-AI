@@ -8,6 +8,7 @@ const externalApiService = require('../services/externalApiService');
 const gatewayController = require('../controllers/gatewayController');
 const optimizationDecisionService = require('../services/optimizationDecisionService');
 const ProviderKey = require('../models/ProviderKey');
+const ProviderModel = require('../models/ProviderModel');
 const RequestLog = require('../models/RequestLog');
 const CacheRule = require('../models/CacheRule');
 
@@ -16,6 +17,8 @@ const User = require('../models/User');
 // Backup globals
 const originalGlobalFetch = globalThis.fetch;
 const originalProviderKeyFindOne = ProviderKey.findOne;
+const originalProviderKeyFind = ProviderKey.find;
+const originalProviderModelFind = ProviderModel.find;
 const originalRequestLogCreate = RequestLog.create;
 const originalRequestLogFind = RequestLog.find;
 const originalCacheRuleFindOne = CacheRule.findOne;
@@ -61,12 +64,17 @@ test('Anthropic Provider and Gateway Integration Tests', async (t) => {
     text: async () => 'Error response content'
   };
 
+  let originalEnvMode;
+
   t.before(() => {
+    originalEnvMode = process.env.OPTIMIZATION_MODE;
     // Disable DB log writes and lookups
     RequestLog.create = async () => ({});
     RequestLog.find = () => ({ lean: async () => [] });
     CacheRule.findOne = async () => null;
     User.findById = async () => ({ role: 'user' });
+    ProviderKey.find = async () => [];
+    ProviderModel.find = async () => [];
 
     // Global fetch mock
     globalThis.fetch = async (url, options) => {
@@ -96,11 +104,15 @@ test('Anthropic Provider and Gateway Integration Tests', async (t) => {
       text: async () => 'Error response content'
     };
     process.env.OPTIMIZATION_ENABLED = 'true';
+    process.env.OPTIMIZATION_MODE = 'automatic';
   });
 
   t.after(() => {
+    process.env.OPTIMIZATION_MODE = originalEnvMode;
     globalThis.fetch = originalGlobalFetch;
     ProviderKey.findOne = originalProviderKeyFindOne;
+    ProviderKey.find = originalProviderKeyFind;
+    ProviderModel.find = originalProviderModelFind;
     RequestLog.create = originalRequestLogCreate;
     RequestLog.find = originalRequestLogFind;
     CacheRule.findOne = originalCacheRuleFindOne;
@@ -204,7 +216,7 @@ test('Anthropic Provider and Gateway Integration Tests', async (t) => {
         );
       },
       (err) => {
-        assert.strictEqual(err.message, 'No active Anthropic API key found in vault for this user');
+        assert.strictEqual(err.message, "ConfigurationError: Active API key for provider 'anthropic' not found in vault");
         return true;
       }
     );

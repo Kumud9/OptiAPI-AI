@@ -62,6 +62,7 @@ services:
       - VAULT_ENCRYPTION_KEY=optiapi_vault_encryption_key_secure_2026_xYz
       - NODE_ENV=production
       - OPTIMIZATION_ENABLED=true
+      - OPTIMIZATION_MODE=automatic
     depends_on:
       mongodb:
         condition: service_healthy

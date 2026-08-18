@@ -6,25 +6,69 @@ const { calculateRecommendation } = require('./scoringService');
 const SUPPORTED_PROVIDERS = ['gemini', 'openai', 'anthropic'];
 
 /**
- * Builds the optimization decision for a given user, mode, and provider filter.
+ * Builds the optimization decision for a given user, mode, and optional request details / provider filter.
  *
  * @param {string|mongoose.Types.ObjectId} userId
  * @param {string} mode
+ * @param {object|null} reqDetails - { provider, endpoint, body }
  * @param {Array<string>|null} providersFilter
  * @returns {Promise<object|null>}
  */
-async function getOptimizationDecision(userId, mode = 'balanced', providersFilter = null) {
-  // Fetch historical metrics
+async function getOptimizationDecision(userId, mode = 'balanced', reqDetails = null, providersFilter = null) {
+  const { extractRequiredCapabilities, getEligibleCandidates } = require('./providerEligibilityService');
+
+  // 1. Determine required capabilities from request
+  let requiredCaps = {};
+  if (reqDetails) {
+    requiredCaps = extractRequiredCapabilities(reqDetails.provider, reqDetails.endpoint, reqDetails.body);
+  }
+
+  // 2. Fetch eligible candidates and exclusions list
+  const { eligible, explanations } = await getEligibleCandidates(userId, requiredCaps);
+
+  // If no candidates are eligible, abort
+  if (eligible.length === 0) {
+    return {
+      success: false,
+      code: 'NO_ELIGIBLE_PROVIDERS',
+      message: 'No providers match the capability requirements or have active credentials.',
+      explanations
+    };
+  }
+
+  // 3. Fetch historical metrics
   const metrics = await getHistoricalMetricsForUser(userId);
 
-  // Evaluate the best recommendation candidate
-  const recommendation = calculateRecommendation(metrics, mode, providersFilter);
+  // 4. Filter metrics based on eligibility list
+  let eligibleMetrics = metrics.filter(m =>
+    eligible.some(el => el.provider === m.provider && el.model === m.model)
+  );
+
+  // Apply providersFilter if present
+  if (providersFilter && Array.isArray(providersFilter)) {
+    eligibleMetrics = eligibleMetrics.filter(m => providersFilter.includes(m.provider));
+  }
+
+  // 5. Evaluate the best recommendation candidate from eligible metrics
+  const recommendation = calculateRecommendation(eligibleMetrics, mode);
 
   if (!recommendation) {
+    // Collect cold starts / insufficient telemetry models for details
+    const coldStarts = eligible.map(el => {
+      const hist = metrics.find(m => m.provider === el.provider && m.model === el.model);
+      const reqCount = hist ? hist.successfulRequests : 0;
+      return {
+        provider: el.provider,
+        model: el.model,
+        reason: reqCount < 5 ? 'Insufficient historical data' : 'Eligible but uncalculated'
+      };
+    });
+
     return {
       success: false,
       code: 'INSUFFICIENT_DATA',
-      message: 'Not enough historical provider data to make a reliable recommendation.'
+      message: 'Not enough historical provider data to make a reliable recommendation.',
+      explanations: [...explanations, ...coldStarts]
     };
   }
 
@@ -57,6 +101,9 @@ async function getOptimizationDecision(userId, mode = 'balanced', providersFilte
       endpoint: recommendation.endpoint,
       score: recommendation.score,
       confidence: recommendation.confidence,
+      costScore: recommendation.costScore,
+      latencyScore: recommendation.latencyScore,
+      reliabilityScore: recommendation.reliabilityScore,
       reason: {
         cost: costReason,
         latency: latencyReason,
@@ -69,7 +116,8 @@ async function getOptimizationDecision(userId, mode = 'balanced', providersFilte
       avgLatencyMs: matchingMetric.avgLatencyMs,
       p95LatencyMs: matchingMetric.p95LatencyMs,
       avgCostUsd: matchingMetric.avgCostUsd
-    }
+    },
+    explanations
   };
 }
 

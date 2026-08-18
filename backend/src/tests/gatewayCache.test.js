@@ -99,6 +99,114 @@ test('Gateway Cache Integration - Endpoint Resolution & Cache Rules Matching', a
     assert.strictEqual(res.headers.get('x-optiapi-cache'), 'MISS');
   });
 
+  await t.test('Case 4: Gemini Cache Integration & Normalization', async (t2) => {
+    // Ensure Gemini provider key is set to a simulated demo key
+    await db.collection('providerkeys').deleteMany({ userId: user._id, provider: 'gemini' });
+    await db.collection('providerkeys').insertOne({
+      userId: user._id,
+      provider: 'gemini',
+      name: 'Gemini Dev Key',
+      value: 'demo-gemini-key-replace-with-real-key',
+      isActive: true,
+      createdAt: new Date()
+    });
+
+    // 4.1 identical Gemini requests produce a MISS then HIT with actual gateway endpoint
+    await db.collection('cacherules').deleteMany({ userId: user._id, provider: 'gemini' });
+    await db.collection('cacherules').insertOne({
+      userId: user._id,
+      provider: 'gemini',
+      endpoint: '/v1/models/gemini-3.6-flash:generatecontent',
+      ttlSeconds: 3600,
+      isActive: true,
+      createdAt: new Date()
+    });
+
+    await flushRedisCache(userIdString);
+
+    const body1 = { contents: [{ role: 'user', parts: [{ text: 'hello' }] }] };
+
+    // Request 1: Expect MISS
+    const res1 = await fetch(`${GATEWAY_URL}/gemini/v1beta/models/gemini-3.6-flash:generateContent`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-api-key': API_KEY },
+      body: JSON.stringify(body1)
+    });
+    assert.strictEqual(res1.status, 200);
+    assert.strictEqual(res1.headers.get('x-optiapi-cache'), 'MISS');
+
+    // Request 2: Expect HIT
+    const res2 = await fetch(`${GATEWAY_URL}/gemini/v1beta/models/gemini-3.6-flash:generateContent`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-api-key': API_KEY },
+      body: JSON.stringify(body1)
+    });
+    assert.strictEqual(res2.status, 200);
+    assert.strictEqual(res2.headers.get('x-optiapi-cache'), 'HIT');
+
+    // 4.2 different request bodies produce different keys -> MISS
+    const body2 = { contents: [{ role: 'user', parts: [{ text: 'different query' }] }] };
+    const res3 = await fetch(`${GATEWAY_URL}/gemini/v1beta/models/gemini-3.6-flash:generateContent`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-api-key': API_KEY },
+      body: JSON.stringify(body2)
+    });
+    assert.strictEqual(res3.status, 200);
+    assert.strictEqual(res3.headers.get('x-optiapi-cache'), 'MISS');
+
+    // 4.3 different models produce different keys -> MISS
+    const res4 = await fetch(`${GATEWAY_URL}/gemini/v1beta/models/gemini-pro:generatecontent`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-api-key': API_KEY },
+      body: JSON.stringify(body1)
+    });
+    assert.strictEqual(res4.status, 200);
+    assert.strictEqual(res4.headers.get('x-optiapi-cache'), 'MISS');
+
+    // 4.4 TTL is respected
+    await db.collection('cacherules').deleteMany({ userId: user._id, provider: 'gemini' });
+    await db.collection('cacherules').insertOne({
+      userId: user._id,
+      provider: 'gemini',
+      endpoint: '/v1/models/gemini-3.6-flash:generatecontent',
+      ttlSeconds: 1, // 1 second TTL
+      isActive: true,
+      createdAt: new Date()
+    });
+
+    await flushRedisCache(userIdString);
+
+    // Request with short TTL: Expect MISS
+    const res5 = await fetch(`${GATEWAY_URL}/gemini/v1beta/models/gemini-3.6-flash:generateContent`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-api-key': API_KEY },
+      body: JSON.stringify(body1)
+    });
+    assert.strictEqual(res5.status, 200);
+    assert.strictEqual(res5.headers.get('x-optiapi-cache'), 'MISS');
+
+    // Immediate request: Expect HIT
+    const res6 = await fetch(`${GATEWAY_URL}/gemini/v1beta/models/gemini-3.6-flash:generateContent`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-api-key': API_KEY },
+      body: JSON.stringify(body1)
+    });
+    assert.strictEqual(res6.status, 200);
+    assert.strictEqual(res6.headers.get('x-optiapi-cache'), 'HIT');
+
+    // Wait 1.5 seconds for TTL expiration
+    await new Promise(resolve => setTimeout(resolve, 1500));
+
+    // Post-expiration request: Expect MISS
+    const res7 = await fetch(`${GATEWAY_URL}/gemini/v1beta/models/gemini-3.6-flash:generateContent`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-api-key': API_KEY },
+      body: JSON.stringify(body1)
+    });
+    assert.strictEqual(res7.status, 200);
+    assert.strictEqual(res7.headers.get('x-optiapi-cache'), 'MISS');
+  });
+
   // Disconnect database
   await mongoose.disconnect();
 });

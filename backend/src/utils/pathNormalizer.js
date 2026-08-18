@@ -25,6 +25,22 @@ const normalizeEndpoint = (pathRaw) => {
     clean = '/' + clean;
   }
 
+  // Strip any provider prefix (e.g., /gemini/, /openai/) at the start of the path
+  const providers = ['openai', 'gemini', 'claude', 'anthropic', 'google_maps', 'stripe', 'twilio', 'weather', 'custom'];
+  for (const p of providers) {
+    if (clean.toLowerCase() === `/${p}`) {
+      clean = '/';
+      break;
+    }
+    if (clean.toLowerCase().startsWith(`/${p}/`)) {
+      clean = clean.substring(p.length + 1);
+      break;
+    }
+  }
+
+  // Standardize API version prefixes (e.g., v1beta -> v1)
+  clean = clean.replace(/^\/v1beta\//i, '/v1/');
+
   return clean;
 };
 

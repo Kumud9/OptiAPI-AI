@@ -1,6 +1,7 @@
 const CacheRule = require('../models/CacheRule');
 const { getRedisClient } = require('../config/redis');
 const logger = require('../utils/logger');
+const { normalizeEndpoint } = require('../utils/pathNormalizer');
 
 /**
  * Cache Rules management and cache purging.
@@ -23,8 +24,8 @@ const createCacheRule = async (req, res) => {
     return res.status(400).json({ success: false, error: 'Please provide provider, endpoint, and TTL in seconds' });
   }
 
-  // Enforce slash prefix on endpoint
-  const formattedEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
+  // Normalize endpoint cleanly
+  const formattedEndpoint = normalizeEndpoint(endpoint);
 
   try {
     // Check if rule already exists

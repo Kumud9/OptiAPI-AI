@@ -20,7 +20,7 @@ const getRecommendations = async (req, res) => {
       recs = await analyzeLogsAndOptimize(userId);
     }
 
-    return res.status(200).json({ success: true, count: recs.length, data: recs });
+    return res.status(200).json({ success: true, count: recs.length, data: recs, optimizationMode: process.env.OPTIMIZATION_MODE || 'recommendation' });
   } catch (error) {
     logger.error(`Get recommendations error: ${error.message}`);
     return res.status(500).json({ success: false, error: 'Failed to retrieve optimization recommendations' });
@@ -87,7 +87,62 @@ const applyRecommendation = async (req, res) => {
   }
 };
 
+let globalDefaultStrategy = 'balanced';
+
+const getSettings = async (req, res) => {
+  try {
+    return res.status(200).json({
+      success: true,
+      data: {
+        optimizationMode: process.env.OPTIMIZATION_MODE || 'recommendation',
+        optimizationEnabled: process.env.OPTIMIZATION_ENABLED === 'true',
+        defaultStrategy: globalDefaultStrategy,
+        automaticRoutingAllowed: process.env.OPTIMIZATION_MODE === 'automatic'
+      }
+    });
+  } catch (error) {
+    logger.error(`Get optimization settings error: ${error.message}`);
+    return res.status(500).json({ success: false, error: 'Failed to retrieve settings' });
+  }
+};
+
+const updateSettings = async (req, res) => {
+  const { optimizationMode, optimizationEnabled, defaultStrategy, automaticRoutingAllowed } = req.body;
+  try {
+    if (optimizationMode !== undefined) {
+      process.env.OPTIMIZATION_MODE = optimizationMode;
+    }
+    if (optimizationEnabled !== undefined) {
+      process.env.OPTIMIZATION_ENABLED = optimizationEnabled ? 'true' : 'false';
+    }
+    if (automaticRoutingAllowed !== undefined) {
+      process.env.OPTIMIZATION_MODE = automaticRoutingAllowed ? 'automatic' : 'recommendation';
+    }
+    if (defaultStrategy !== undefined) {
+      globalDefaultStrategy = defaultStrategy;
+    }
+
+    logger.info(`Global optimization settings updated: Mode=${process.env.OPTIMIZATION_MODE}, Enabled=${process.env.OPTIMIZATION_ENABLED}, Strategy=${globalDefaultStrategy}`);
+    
+    return res.status(200).json({
+      success: true,
+      message: 'Global settings updated successfully.',
+      data: {
+        optimizationMode: process.env.OPTIMIZATION_MODE || 'recommendation',
+        optimizationEnabled: process.env.OPTIMIZATION_ENABLED === 'true',
+        defaultStrategy: globalDefaultStrategy,
+        automaticRoutingAllowed: process.env.OPTIMIZATION_MODE === 'automatic'
+      }
+    });
+  } catch (error) {
+    logger.error(`Update optimization settings error: ${error.message}`);
+    return res.status(500).json({ success: false, error: 'Failed to update settings' });
+  }
+};
+
 module.exports = {
   getRecommendations,
-  applyRecommendation
+  applyRecommendation,
+  getSettings,
+  updateSettings
 };

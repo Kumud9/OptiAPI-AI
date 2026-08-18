@@ -57,7 +57,7 @@ const DashboardLayout = ({ children }) => {
         {/* Brand Logo */}
         <div className="flex items-center gap-2 px-6 h-16 border-b border-zinc-800/80">
           <Zap className="text-primary h-6 w-6 animate-pulse" />
-          <span className="text-lg font-bold bg-glow-blue tracking-tight">OptiAPI <span className="text-primary-light">AI</span></span>
+          <span className="text-lg font-bold bg-glow-blue tracking-tight">OptiAPI</span>
         </div>
 
         {/* Navigation list */}
@@ -149,7 +149,7 @@ const DashboardLayout = ({ children }) => {
 
             <div className="flex items-center gap-2 mb-8 mt-2 px-2">
               <Zap className="text-primary h-6 w-6" />
-              <span className="text-lg font-bold">OptiAPI <span className="text-primary">AI</span></span>
+              <span className="text-lg font-bold">OptiAPI</span>
             </div>
 
             <nav className="flex-1 space-y-1">

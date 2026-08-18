@@ -42,7 +42,7 @@ const gatewayCache = async (req, res, next) => {
       .update(bodyStr + queryStr)
       .digest('hex');
 
-    const cacheKey = `apicache:${userId}:${provider}:${endpoint}:${requestHash}`;
+    const cacheKey = `apicache:${userId}:${provider.toLowerCase()}:${endpoint.toLowerCase()}:${requestHash}`;
     req.cacheKey = cacheKey;
 
     // 3. Query Redis Cache
@@ -50,7 +50,7 @@ const gatewayCache = async (req, res, next) => {
     const cachedResponse = await redis.get(cacheKey);
 
     if (cachedResponse) {
-      logger.info(`Cache HIT on gateway: [${provider.toUpperCase()}] ${endpoint}`);
+      logger.info(`Cache HIT on gateway: [${provider.toUpperCase()}] ${endpoint.toLowerCase()}`);
       req.cacheStatus = 'HIT';
       
       const parsedData = JSON.parse(cachedResponse);
@@ -72,7 +72,14 @@ const gatewayCache = async (req, res, next) => {
         tokensUsed: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
         cacheStatus: 'HIT',
         requestBody: JSON.stringify(req.body || {}),
-        responseBody: cachedResponse
+        responseBody: cachedResponse,
+        requestedProvider: provider,
+        requestedModel: req.body ? req.body.model : null,
+        recommendedProvider: provider,
+        recommendedModel: req.body ? req.body.model : null,
+        actualProvider: provider,
+        actualModel: req.body ? req.body.model : null,
+        routedProvider: provider
       }).catch(err => logger.error(`Failed to log cache HIT: ${err.message}`));
 
       // Return immediately

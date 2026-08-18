@@ -38,7 +38,7 @@ const ForgotPassword = () => {
       {/* Logo */}
       <Link to="/" className="flex items-center gap-2 mb-8 text-xl font-bold tracking-tight">
         <Zap className="text-primary h-6 w-6" />
-        <span>OptiAPI <span className="text-primary">AI</span></span>
+        <span>OptiAPI</span>
       </Link>
 
       {/* Box */}
