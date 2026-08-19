@@ -85,6 +85,46 @@ const gatewayCache = async (req, res, next) => {
       // Return immediately
       return res.status(200).json(parsedData);
     }
+    // 4. Query L2 Semantic Cache
+    const { searchSemanticCache, ensureIndex } = require('../services/semanticCacheService');
+    await ensureIndex(redis);
+    
+    // We use a threshold of 0.85 as requested
+    const semanticResponse = await searchSemanticCache(redis, userId, provider.toLowerCase(), endpoint.toLowerCase(), req.body, 0.85);
+    
+    if (semanticResponse) {
+      logger.info(`Semantic Cache HIT on gateway: [${provider.toUpperCase()}] ${endpoint.toLowerCase()}`);
+      req.cacheStatus = 'SEMANTIC_HIT';
+      
+      res.setHeader('X-OptiAPI-Cache', 'SEMANTIC_HIT');
+      res.setHeader('X-OptiAPI-TTL', rule.ttlSeconds);
+
+      // Async write Cache HIT request log to DB
+      RequestLog.create({
+        userId,
+        apiKeyId: req.gatewayKey ? req.gatewayKey._id : null,
+        provider,
+        endpoint,
+        method: req.method,
+        status: 200,
+        responseTimeMs: 3, // Fast cache response time
+        costUsd: 0.0, // Cache hits cost 0
+        tokensUsed: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+        cacheStatus: 'SEMANTIC_HIT',
+        requestBody: JSON.stringify(req.body || {}),
+        responseBody: JSON.stringify(semanticResponse),
+        requestedProvider: provider,
+        requestedModel: req.body ? req.body.model : null,
+        recommendedProvider: provider,
+        recommendedModel: req.body ? req.body.model : null,
+        actualProvider: provider,
+        actualModel: req.body ? req.body.model : null,
+        routedProvider: provider
+      }).catch(err => logger.error(`Failed to log semantic cache HIT: ${err.message}`));
+
+      // Return immediately
+      return res.status(200).json(semanticResponse);
+    }
 
     logger.debug(`Cache MISS on gateway: [${provider.toUpperCase()}] ${endpoint}`);
     req.cacheStatus = 'MISS';

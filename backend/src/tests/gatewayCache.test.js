@@ -20,6 +20,10 @@ async function flushRedisCache(userIdString) {
   if (keys.length > 0) {
     await redisClient.del(keys);
   }
+  const semanticKeys = await redisClient.keys(`apicache_semantic:${userIdString}:*`);
+  if (semanticKeys.length > 0) {
+    await redisClient.del(semanticKeys);
+  }
   await redisClient.quit();
 }
 
@@ -54,6 +58,8 @@ test('Gateway Cache Integration - Endpoint Resolution & Cache Rules Matching', a
     assert.strictEqual(res1.status, 200);
     assert.strictEqual(res1.headers.get('x-optiapi-cache'), 'MISS');
 
+    await new Promise(r => setTimeout(r, 50)); // Allow async Redis SET to complete
+
     // Request 2: Expect Cache HIT (exact same payload)
     const res2 = await fetch(`${GATEWAY_URL}/stripe/v1/customers`, {
       method: 'POST',
@@ -76,6 +82,8 @@ test('Gateway Cache Integration - Endpoint Resolution & Cache Rules Matching', a
     });
     assert.strictEqual(res1.status, 200);
     assert.strictEqual(res1.headers.get('x-optiapi-cache'), 'MISS');
+
+    await new Promise(r => setTimeout(r, 50)); // Allow async Redis SET to complete
 
     // Request 2 with double slash: Expect HIT (matching the normalized key)
     const res2 = await fetch(`${GATEWAY_URL}/stripe//v1/customers`, {

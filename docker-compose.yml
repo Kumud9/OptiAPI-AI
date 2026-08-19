@@ -18,7 +18,7 @@ services:
       start_period: 5s
 
   redis:
-    image: redis:7.0-alpine
+    image: redis/redis-stack-server:7.2.0-v8
     container_name: optiapi_redis
     ports:
       - "6379:6379"

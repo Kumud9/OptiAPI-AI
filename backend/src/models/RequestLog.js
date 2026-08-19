@@ -49,7 +49,7 @@ const RequestLogSchema = new mongoose.Schema({
   },
   cacheStatus: {
     type: String,
-    enum: ['HIT', 'MISS', 'BYPASS'],
+    enum: ['HIT', 'SEMANTIC_HIT', 'MISS', 'BYPASS'],
     default: 'BYPASS',
     index: true
   },

@@ -317,6 +317,10 @@ const handleGatewayRequest = async (req, res) => {
         const redis = getRedisClient();
         await redis.setEx(req.cacheKey, req.cacheRule.ttlSeconds, JSON.stringify(data));
         logger.debug(`Cached new entry in Redis: ${req.cacheKey} for ${req.cacheRule.ttlSeconds}s`);
+        
+        // Also save to L2 Semantic Cache
+        const { saveSemanticCache } = require('../services/semanticCacheService');
+        await saveSemanticCache(redis, userId, selectedProvider.toLowerCase(), routingEndpoint.toLowerCase(), req.body, data, req.cacheRule.ttlSeconds);
       } catch (err) {
         logger.error(`Failed to write cache entry to Redis: ${err.message}`);
       }
