@@ -1,5 +1,6 @@
 const Recommendation = require('../models/Recommendation');
 const CacheRule = require('../models/CacheRule');
+const ProviderKey = require('../models/ProviderKey');
 const { analyzeLogsAndOptimize } = require('../services/optimizationEngine');
 const logger = require('../utils/logger');
 
@@ -13,6 +14,32 @@ const getRecommendations = async (req, res) => {
   try {
     // 1. Fetch existing recommendations
     let recs = await Recommendation.find({ userId, isApplied: false }).sort({ createdAt: -1 });
+
+    // Filter out stale unused_keys recommendations
+    const validRecs = [];
+    for (const rec of recs) {
+      if (rec.type === 'unused_keys') {
+        const providerName = rec.targetEndpoint;
+        const keyName = rec.details?.keyName;
+        
+        const keyExists = await ProviderKey.findOne({
+          userId,
+          provider: providerName,
+          name: keyName,
+          isActive: true
+        });
+        
+        if (keyExists) {
+          validRecs.push(rec);
+        } else {
+          // Cleanup stale recommendation
+          await Recommendation.deleteOne({ _id: rec._id });
+        }
+      } else {
+        validRecs.push(rec);
+      }
+    }
+    recs = validRecs;
 
     // 2. Dynamic log analysis fallback if list is empty
     if (recs.length === 0) {

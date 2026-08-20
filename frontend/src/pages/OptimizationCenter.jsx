@@ -215,7 +215,7 @@ const OptimizationCenter = () => {
   const totalPotentialSavings = recommendations.reduce((acc, rec) => acc + rec.savingsInr, 0);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-10 pb-10">
       
       {/* Page Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
@@ -237,377 +237,269 @@ const OptimizationCenter = () => {
         )}
       </div>
 
-      {/* Primary Optimization Recommendation Panel */}
-      {loadingDecision ? (
-        <div className="h-64 bg-zinc-900 border border-zinc-850 rounded-2xl skeleton-shimmer" />
-      ) : decision ? (
-        decision.success && decision.decision ? (
-          <div className="bg-gradient-to-br from-emerald-500/10 via-zinc-950 to-zinc-950 border border-emerald-500/20 rounded-2xl p-6 shadow-glow-green relative overflow-hidden">
-            <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/10 rounded-full blur-3xl -mr-10 -mt-10 pointer-events-none"></div>
-            
-            <div className="flex justify-between items-center pb-4 border-b border-zinc-900">
-              <div>
-                <span className="px-3 py-1 rounded-full text-xs font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 uppercase tracking-wider">
-                  ⭐ Optimization Recommendation
-                </span>
-              </div>
-              <div className="text-right">
-                <span className="text-xs text-zinc-500 block font-semibold uppercase">Recommendation Score</span>
-                <span className="text-3xl font-black text-emerald-400">{decision.decision.score}</span>
-              </div>
-            </div>
-
-            {/* Recommended Highlight Card */}
-            <div className="my-8 flex flex-col items-center justify-center p-8 rounded-xl bg-emerald-500/10 border border-emerald-500/20 shadow-glow-green relative">
-              <span className="text-3xl font-bold text-emerald-400 tracking-tight mb-2">
-                {formatProvider(decision.decision.provider)}
-              </span>
-              <span className="text-lg text-emerald-400/70 font-mono">
-                {decision.decision.model}
-              </span>
-            </div>
-
-            {/* Explanation text */}
-            <div className="mt-4 text-sm text-zinc-400">
-              <span className="font-semibold text-zinc-355 block mb-1">Why this was recommended:</span>
-              <p className="leading-relaxed">
-                OptiAPI evaluated available candidates. Based on {decision.metrics?.successfulRequests || 0} successful calls, {formatProvider(decision.decision.provider)} is recommended to optimize {defaultStrategy} performance.
-              </p>
-            </div>
-
-            {/* Expandable "Why this recommendation?" details */}
-            <div className="mt-4 pt-3 border-t border-zinc-900">
-              <button
-                type="button"
-                onClick={() => setShowWhyDetails(!showWhyDetails)}
-                className="text-xs font-semibold text-primary-light hover:underline flex items-center gap-1.5 focus:outline-none"
-              >
-                {showWhyDetails ? 'Hide Recommendation Metrics ▲' : 'Why this recommendation? (Show Metrics) ▼'}
-              </button>
+      {/* 1. RECOMMENDED PROVIDER */}
+      <section>
+        <h2 className="text-sm font-bold uppercase tracking-wider text-zinc-400 mb-4 flex items-center gap-2">
+          <Zap size={16} className="text-emerald-400" /> Recommended Provider
+        </h2>
+        {loadingDecision ? (
+          <div className="h-48 bg-zinc-900 border border-zinc-850 rounded-2xl skeleton-shimmer" />
+        ) : decision ? (
+          decision.success && decision.decision ? (
+            <div className="bg-gradient-to-br from-emerald-500/10 via-zinc-950 to-zinc-950 border border-emerald-500/20 rounded-2xl p-6 shadow-glow-green relative overflow-hidden">
+              <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/10 rounded-full blur-3xl -mr-10 -mt-10 pointer-events-none"></div>
               
-              {showWhyDetails && (
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mt-3 p-3 bg-zinc-900/50 rounded-xl border border-zinc-850 animate-fadeIn">
-                  <div>
-                    <span className="text-[11px] text-zinc-500 block font-semibold uppercase">Average Cost</span>
-                    <span className="text-sm font-bold text-zinc-200">{decision.decision.reason?.cost || 'N/A'}</span>
-                  </div>
-                  <div>
-                    <span className="text-[11px] text-zinc-500 block font-semibold uppercase">Average Latency</span>
-                    <span className="text-sm font-bold text-zinc-200">{decision.decision.reason?.latency || 'N/A'}</span>
-                  </div>
-                  <div>
-                    <span className="text-[11px] text-zinc-500 block font-semibold uppercase">Reliability Rate</span>
-                    <span className="text-sm font-bold text-emerald-400">{decision.decision.reason?.reliability || 'N/A'}</span>
-                  </div>
-                  <div>
-                    <span className="text-[11px] text-zinc-500 block font-semibold uppercase">Historical Telemetry</span>
-                    <span className="text-sm font-bold text-zinc-200">{decision.metrics?.successfulRequests || 0} calls</span>
-                  </div>
+              <div className="flex justify-between items-start mb-4 relative z-10">
+                <div>
+                  <span className="text-4xl font-black text-emerald-400 tracking-tight block">
+                    {formatProvider(decision.decision.provider)}
+                  </span>
+                  <span className="text-lg text-emerald-400/70 font-mono mt-1 block">
+                    {decision.decision.model}
+                  </span>
                 </div>
-              )}
-            </div>
-
-          </div>
-        ) : (
-          <div className="p-5 rounded-2xl border border-zinc-800 bg-zinc-950/20 space-y-4">
-            <div>
-              <span className="px-3 py-1 rounded-full text-xs font-bold bg-zinc-800 text-zinc-400 border border-zinc-700 uppercase tracking-wider">
-                Optimization Status
-              </span>
-              <h2 className="text-base font-bold text-zinc-350 mt-2 flex items-center gap-1.5">
-                <AlertTriangle size={17} className="text-amber-500" /> OPTIMIZATION UNAVAILABLE
-              </h2>
-              <p className="text-sm text-zinc-400 mt-1.5 leading-relaxed">
-                {decision.message || 'Not enough successful historical requests.'}
-              </p>
-            </div>
-
-            {decision.explanations && decision.explanations.length > 0 && (
-              <div className="grid sm:grid-cols-2 gap-4 pt-2">
-                {decision.explanations.map((exp, idx) => {
-                  const isQuota = /quota/i.test(exp.reason || '') || /RESOURCE_EXHAUSTED/i.test(exp.reason || '');
-                  const isHealth = /validation/i.test(exp.reason || '') || /credentials/i.test(exp.reason || '') || /connection/i.test(exp.reason || '') || /unauthorized/i.test(exp.reason || '');
-                  const isData = /insufficient/i.test(exp.reason || '') || /data/i.test(exp.reason || '');
-                  
-                  let badgeColor = "bg-zinc-800/40 text-zinc-450 border-zinc-700/50";
-                  let statusText = "Excluded";
-
-                  if (isQuota) {
-                    badgeColor = "bg-rose-500/10 text-rose-400 border-rose-500/20";
-                    statusText = "Quota Exhausted";
-                  } else if (isHealth) {
-                    badgeColor = "bg-rose-500/10 text-rose-450 border-rose-500/20";
-                    statusText = "Authentication Failed";
-                  } else if (isData) {
-                    badgeColor = "bg-amber-500/10 text-amber-400 border-amber-500/20";
-                    statusText = "Insufficient historical data";
-                  }
-
-                  return (
-                    <div key={idx} className="p-3 bg-zinc-900/10 rounded-xl border border-zinc-850 flex items-start justify-between gap-4">
-                      <div>
-                        <span className="text-sm font-bold text-zinc-200 block">{formatProvider(exp.provider)}</span>
-                        <p className="text-xs text-zinc-500 leading-normal mt-1">{exp.reason}</p>
-                      </div>
-                      <span className={`shrink-0 inline-block px-2 py-0.5 rounded text-xs font-bold border ${badgeColor}`}>
-                        {statusText}
-                      </span>
-                    </div>
-                  );
-                })}
+                <div className="text-right">
+                  <span className="text-xs text-zinc-500 block font-semibold uppercase mb-1">Recommendation Score</span>
+                  <span className="text-3xl font-black text-emerald-400">{decision.decision.score}</span>
+                </div>
               </div>
-            )}
+
+              <div className="mb-6 relative z-10">
+                <p className="text-zinc-300 text-sm leading-relaxed">
+                  OptiAPI recommends this provider to optimize for {defaultStrategy} based on recent telemetry.
+                </p>
+              </div>
+
+              {/* Expandable "Why this recommendation?" details */}
+              <div className="border-t border-zinc-900 pt-4 relative z-10">
+                <button
+                  type="button"
+                  onClick={() => setShowWhyDetails(!showWhyDetails)}
+                  className="text-xs font-semibold text-emerald-500 hover:text-emerald-400 flex items-center gap-1.5 focus:outline-none transition-colors"
+                >
+                  {showWhyDetails ? 'Hide details ▲' : 'Why this recommendation? ▼'}
+                </button>
+                
+                {showWhyDetails && (
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mt-4 p-4 bg-zinc-900/50 rounded-xl border border-zinc-850">
+                    <div>
+                      <span className="text-[11px] text-zinc-500 block font-semibold uppercase">Cost</span>
+                      <span className="text-sm font-bold text-zinc-200">{decision.decision.reason?.cost || 'N/A'}</span>
+                    </div>
+                    <div>
+                      <span className="text-[11px] text-zinc-500 block font-semibold uppercase">Latency</span>
+                      <span className="text-sm font-bold text-zinc-200">{decision.decision.reason?.latency || 'N/A'}</span>
+                    </div>
+                    <div>
+                      <span className="text-[11px] text-zinc-500 block font-semibold uppercase">Reliability</span>
+                      <span className="text-sm font-bold text-emerald-400">{decision.decision.reason?.reliability || 'N/A'}</span>
+                    </div>
+                    <div>
+                      <span className="text-[11px] text-zinc-500 block font-semibold uppercase">Evaluated</span>
+                      <span className="text-sm font-bold text-zinc-200">{decision.metrics?.successfulRequests || 0} calls</span>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          ) : (
+            <div className="p-5 rounded-2xl border border-zinc-800 bg-zinc-950/20">
+              <h2 className="text-base font-bold text-zinc-350 flex items-center gap-1.5">
+                <AlertTriangle size={17} className="text-amber-500" /> Optimization Unavailable
+              </h2>
+              <p className="text-sm text-zinc-400 mt-1.5">{decision.message || 'Not enough data.'}</p>
+            </div>
+          )
+        ) : null}
+      </section>
+
+      {/* 2. PERFORMANCE OVERVIEW */}
+      <section>
+        <h2 className="text-sm font-bold uppercase tracking-wider text-zinc-400 mb-4 flex items-center gap-2">
+          <TrendingDown size={16} className="text-blue-400" /> Performance Overview
+        </h2>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="p-4 rounded-xl border border-zinc-850 bg-zinc-900/40">
+            <span className="text-[11px] text-zinc-500 block font-semibold uppercase mb-1">Requests</span>
+            <span className="text-2xl font-bold text-zinc-200">{decision?.metrics?.successfulRequests || 0}</span>
           </div>
-        )
-      ) : null}
+          <div className="p-4 rounded-xl border border-zinc-850 bg-zinc-900/40">
+            <span className="text-[11px] text-zinc-500 block font-semibold uppercase mb-1">Avg Latency</span>
+            <span className="text-2xl font-bold text-zinc-200">{decision?.decision?.reason?.latency || 'N/A'}</span>
+          </div>
+          <div className="p-4 rounded-xl border border-zinc-850 bg-zinc-900/40">
+            <span className="text-[11px] text-zinc-500 block font-semibold uppercase mb-1">Cache Rate</span>
+            <span className="text-2xl font-bold text-zinc-200">{decision?.decision?.reason?.reliability || 'N/A'}</span>
+          </div>
+          <div className="p-4 rounded-xl border border-zinc-850 bg-zinc-900/40">
+            <span className="text-[11px] text-zinc-500 block font-semibold uppercase mb-1">Cost</span>
+            <span className="text-2xl font-bold text-zinc-200">{decision?.decision?.reason?.cost || 'N/A'}</span>
+          </div>
+        </div>
+      </section>
 
       {/* Global Optimization Settings Section */}
-      <div className="p-5 rounded-xl border border-zinc-800 bg-zinc-950/20 space-y-4">
-        <div className="flex justify-between items-start sm:items-center flex-col sm:flex-row gap-2">
-          <div>
-            <h3 className="text-sm font-bold uppercase tracking-wider text-zinc-400 flex items-center gap-1.5">
-              <Settings size={16} className="text-primary" /> Global Optimization Settings
-            </h3>
-            <p className="text-xs text-zinc-500 mt-0.5">Configure system-wide routing rules. Changes affect all API execution models globally.</p>
-          </div>
-          <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-500/10 text-amber-500 border border-amber-500/20 flex items-center gap-1">
-            <Globe size={12} /> System-Wide Config
-          </span>
-        </div>
-
-        <div className="grid lg:grid-cols-3 gap-6 pt-2">
-          
-          {/* Column 1: Execution Mode */}
-          <div className="space-y-3 border-r border-zinc-800/60 pr-0 lg:pr-6">
+      <section>
+        <div className="p-5 rounded-xl border border-zinc-800 bg-zinc-950/20 space-y-4">
+          <div className="flex justify-between items-start sm:items-center flex-col sm:flex-row gap-2">
             <div>
+              <h3 className="text-sm font-bold uppercase tracking-wider text-zinc-400 flex items-center gap-1.5">
+                <Settings size={16} className="text-primary" /> Global Optimization Settings
+              </h3>
+            </div>
+          </div>
+
+          <div className="grid lg:grid-cols-3 gap-6 pt-2">
+            <div className="space-y-3 border-r border-zinc-800/60 pr-0 lg:pr-6">
               <label className="block text-xs font-bold text-zinc-400">Execution Mode</label>
-              <p className="text-xs text-zinc-500 leading-relaxed mt-0.5">Determine if routing changes are manual or automatic.</p>
-            </div>
-            <div className="space-y-2">
-              <button
-                type="button"
-                onClick={() => handleUpdateSettings({ optimizationMode: 'recommendation' })}
-                className={`w-full text-left p-3 rounded-xl border transition-all flex flex-col justify-between ${
-                  optimizationMode === 'recommendation'
-                    ? 'border-primary bg-primary/5 shadow-glow-blue'
-                    : 'border-zinc-850 bg-zinc-900/10 opacity-70 hover:opacity-100'
-                }`}
-              >
-                <div className="flex justify-between items-center w-full">
-                  <span className="text-sm font-bold text-zinc-200">Recommendation</span>
-                  {optimizationMode === 'recommendation' && <span className="h-1.5 w-1.5 rounded-full bg-primary-light"></span>}
-                </div>
-                <span className="text-xs text-zinc-400 mt-1 leading-normal">
-                  OptiAPI analyzes provider performance and recommends options. You stay in control.
-                </span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => handleUpdateSettings({ optimizationMode: 'automatic' })}
-                className={`w-full text-left p-3 rounded-xl border transition-all flex flex-col justify-between ${
-                  optimizationMode === 'automatic'
-                    ? 'border-emerald-500 bg-emerald-500/5 shadow-glow-green'
-                    : 'border-zinc-850 bg-zinc-900/10 opacity-70 hover:opacity-100'
-                }`}
-              >
-                <div className="flex justify-between items-center w-full">
-                  <span className="text-sm font-bold text-zinc-200">Automatic Execution</span>
-                  {optimizationMode === 'automatic' && <span className="h-1.5 w-1.5 rounded-full bg-emerald-400"></span>}
-                </div>
-                <span className="text-xs text-zinc-400 mt-1 leading-normal">
-                  OptiAPI automatically routes eligible requests to the recommended provider.
-                </span>
-              </button>
-            </div>
-          </div>
-
-          {/* Column 2: Automatic Routing Allowed */}
-          <div className="space-y-3 border-r border-zinc-800/60 pr-0 lg:pr-6">
-            <div>
-              <label className="block text-xs font-bold text-zinc-400">Automatic Routing Control</label>
-              <p className="text-xs text-zinc-500 leading-relaxed mt-0.5">Control whether requests can be routed automatically.</p>
-            </div>
-            <div className="p-4 rounded-xl border border-zinc-850 bg-zinc-900/10 flex items-center justify-between gap-4">
-              <div>
-                <span className="text-sm font-bold text-zinc-200 block">Allow Automatic Routing</span>
-                <span className="text-xs text-zinc-450 leading-relaxed mt-0.5 block">
-                  Permit active gateway queries to automatically change provider targets.
-                </span>
-              </div>
-              <button
-                type="button"
-                onClick={() => handleUpdateSettings({ automaticRoutingAllowed: !automaticRoutingAllowed })}
-                className="focus:outline-none shrink-0"
-              >
-                {automaticRoutingAllowed ? (
-                  <ToggleRight size={26} className="text-emerald-400" />
-                ) : (
-                  <ToggleLeft size={26} className="text-zinc-600" />
-                )}
-              </button>
-            </div>
-          </div>
-
-          {/* Column 3: Optimization Strategy */}
-          <div className="space-y-3">
-            <div>
-              <label className="block text-xs font-bold text-zinc-400">Optimization Strategy</label>
-              <p className="text-xs text-zinc-500 leading-relaxed mt-0.5">Primary performance scoring metric applied to models.</p>
-            </div>
-            <div className="space-y-2">
-              {['balanced', 'cost', 'latency'].map((strat) => (
+              <div className="space-y-2">
                 <button
-                  key={strat}
                   type="button"
-                  onClick={() => handleUpdateSettings({ defaultStrategy: strat })}
-                  className={`w-full p-2.5 rounded-xl border text-xs font-semibold text-left transition-all flex items-center justify-between capitalize ${
-                    defaultStrategy === strat
-                      ? 'border-primary/50 bg-primary/5 text-primary-light'
-                      : 'border-zinc-850 bg-zinc-900/10 text-zinc-400 hover:text-zinc-200'
+                  onClick={() => handleUpdateSettings({ optimizationMode: 'recommendation' })}
+                  className={`w-full text-left p-3 rounded-xl border transition-all flex flex-col justify-between ${
+                    optimizationMode === 'recommendation'
+                      ? 'border-primary bg-primary/5 shadow-glow-blue'
+                      : 'border-zinc-850 bg-zinc-900/10 opacity-70 hover:opacity-100'
                   }`}
                 >
-                  <span>{strat} Mode</span>
-                  {defaultStrategy === strat && <Check size={14} className="text-primary-light" />}
+                  <div className="flex justify-between items-center w-full">
+                    <span className="text-sm font-bold text-zinc-200">Manual</span>
+                    {optimizationMode === 'recommendation' && <span className="h-1.5 w-1.5 rounded-full bg-primary-light"></span>}
+                  </div>
+                  <span className="text-xs text-zinc-400 mt-1 leading-normal">
+                    OptiAPI analyzes provider performance and recommends options.
+                  </span>
                 </button>
-              ))}
+
+                <button
+                  type="button"
+                  onClick={() => handleUpdateSettings({ optimizationMode: 'automatic' })}
+                  className={`w-full text-left p-3 rounded-xl border transition-all flex flex-col justify-between ${
+                    optimizationMode === 'automatic'
+                      ? 'border-emerald-500 bg-emerald-500/5 shadow-glow-green'
+                      : 'border-zinc-850 bg-zinc-900/10 opacity-70 hover:opacity-100'
+                  }`}
+                >
+                  <div className="flex justify-between items-center w-full">
+                    <span className="text-sm font-bold text-zinc-200">Automatic</span>
+                    {optimizationMode === 'automatic' && <span className="h-1.5 w-1.5 rounded-full bg-emerald-400"></span>}
+                  </div>
+                  <span className="text-xs text-zinc-400 mt-1 leading-normal">
+                    OptiAPI automatically routes requests to the recommended provider.
+                  </span>
+                </button>
+              </div>
+            </div>
+
+            <div className="space-y-3 border-r border-zinc-800/60 pr-0 lg:pr-6">
+              <label className="block text-xs font-bold text-zinc-400">Automatic Routing Control</label>
+              <div className="p-4 rounded-xl border border-zinc-850 bg-zinc-900/10 flex items-center justify-between gap-4">
+                <span className="text-sm font-bold text-zinc-200 block">Allow Automatic Routing</span>
+                <button
+                  type="button"
+                  onClick={() => handleUpdateSettings({ automaticRoutingAllowed: !automaticRoutingAllowed })}
+                  className="focus:outline-none shrink-0"
+                >
+                  {automaticRoutingAllowed ? (
+                    <ToggleRight size={26} className="text-emerald-400" />
+                  ) : (
+                    <ToggleLeft size={26} className="text-zinc-600" />
+                  )}
+                </button>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <label className="block text-xs font-bold text-zinc-400">Optimization Strategy</label>
+              <div className="space-y-2">
+                {['balanced', 'cost', 'latency'].map((strat) => (
+                  <button
+                    key={strat}
+                    type="button"
+                    onClick={() => handleUpdateSettings({ defaultStrategy: strat })}
+                    className={`w-full p-2.5 rounded-xl border text-xs font-semibold text-left transition-all flex items-center justify-between capitalize ${
+                      defaultStrategy === strat
+                        ? 'border-primary/50 bg-primary/5 text-primary-light'
+                        : 'border-zinc-850 bg-zinc-900/10 text-zinc-400 hover:text-zinc-200'
+                    }`}
+                  >
+                    <span>{strat} Mode</span>
+                    {defaultStrategy === strat && <Check size={14} className="text-primary-light" />}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
-
         </div>
-      </div>
+      </section>
 
-      {/* Main recommendations list */}
-      {recommendations.length > 0 ? (
-        <div className="grid md:grid-cols-2 gap-6">
-          {recommendations.map((rec) => {
-            const detail = parseRecommendation(rec);
-            return (
-              <div
-                key={rec._id}
-                className="p-5 rounded-xl border border-zinc-850 bg-zinc-900/40 flex flex-col justify-between"
-              >
-                <div className="space-y-4">
-                  {/* Priority & Savings Header */}
-                  <div className="flex justify-between items-center">
-                    {getPriorityBadge(rec.priority)}
+      {/* 3. OPTIMIZATION FINDINGS */}
+      <section>
+        <h2 className="text-sm font-bold uppercase tracking-wider text-zinc-400 mb-4 flex items-center gap-2">
+          <Shield size={16} className="text-rose-400" /> Optimization Findings
+        </h2>
+        {recommendations.length > 0 ? (
+          <div className="space-y-3">
+            {recommendations.map((rec) => {
+              const detail = parseRecommendation(rec);
+              return (
+                <div key={rec._id} className="p-4 rounded-xl border border-zinc-850 bg-zinc-900/40 flex flex-col sm:flex-row gap-4 justify-between items-start sm:items-center">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2 mb-1">
+                      {getPriorityBadge(rec.priority)}
+                      <h3 className="text-sm font-semibold text-zinc-200">{detail.title}</h3>
+                      <span className="text-xs text-zinc-500">• {formatProvider(rec.targetEndpoint || 'System')}</span>
+                    </div>
+                    <p className="text-xs text-zinc-400">{detail.recommendation}</p>
+                    
+                    <details className="mt-2 group">
+                      <summary className="text-[11px] text-zinc-500 cursor-pointer hover:text-zinc-300 list-none flex items-center gap-1 inline-flex">
+                        <span className="group-open:rotate-90 transition-transform">▸</span> View Diagnostics
+                      </summary>
+                      <div className="mt-2 p-3 rounded-lg bg-zinc-950/60 border border-zinc-850 text-[11px] font-mono text-zinc-400 space-y-1">
+                        <div><strong className="text-zinc-300 font-sans">Detected:</strong> {detail.detected}</div>
+                        <div><strong className="text-zinc-300 font-sans">Why it matters:</strong> {detail.whyItMatters}</div>
+                        {rec.details && Object.entries(rec.details).map(([k, v]) => (
+                          <div key={k}><strong className="text-zinc-300 font-sans capitalize">{k}:</strong> {v}</div>
+                        ))}
+                      </div>
+                    </details>
+                  </div>
+                  
+                  <div className="shrink-0 flex items-center gap-4 w-full sm:w-auto justify-between sm:justify-end border-t sm:border-t-0 border-zinc-800 pt-3 sm:pt-0 mt-2 sm:mt-0">
                     {rec.savingsInr > 0 && (
                       <span className="text-[11px] font-semibold text-emerald-400">
-                        Est. Savings: ₹{rec.savingsInr.toLocaleString('en-IN')}/mo
+                        Save ₹{rec.savingsInr.toLocaleString('en-IN')}/mo
                       </span>
                     )}
-                  </div>
-
-                  {/* Recommendation Title */}
-                  <h3 className="text-sm font-semibold text-zinc-200">
-                    {detail.title}
-                  </h3>
-
-                  {/* 1. What was detected */}
-                  <div className="text-xs leading-relaxed">
-                    <span className="font-semibold text-zinc-400 block mb-0.5">What was detected</span>
-                    <p className="text-zinc-350">{detail.detected}</p>
-                  </div>
-
-                  {/* 2. Why it matters */}
-                  <div className="text-xs leading-relaxed">
-                    <span className="font-semibold text-zinc-400 block mb-0.5">Why it matters</span>
-                    <p className="text-zinc-350">{detail.whyItMatters}</p>
-                  </div>
-
-                  {/* 3. Recommendation */}
-                  <div className="text-xs leading-relaxed">
-                    <span className="font-semibold text-zinc-400 block mb-0.5">Recommendation</span>
-                    <p className="text-zinc-350">{detail.recommendation}</p>
-                  </div>
-
-                  {/* Evidence/Diagnostic Section */}
-                  {rec.details && Object.keys(rec.details).length > 0 && (
-                    <div className="p-3 rounded-lg bg-zinc-950/40 border border-zinc-850/50 text-[11px] font-mono space-y-1 text-zinc-400">
-                      <div className="font-sans font-semibold text-zinc-300 mb-1 flex items-center gap-1">
-                        Diagnostic Logs
-                      </div>
-                      {rec.details.avgLatency && (
-                        <div className="flex justify-between">
-                          <span>Avg Latency:</span>
-                          <span className="text-zinc-200">{rec.details.avgLatency}ms</span>
-                        </div>
-                      )}
-                      {rec.details.count && (
-                        <div className="flex justify-between">
-                          <span>Volume:</span>
-                          <span className="text-zinc-200">{rec.details.count} calls</span>
-                        </div>
-                      )}
-                      {rec.details.duplicateCount && (
-                        <div className="flex justify-between">
-                          <span>Duplicates:</span>
-                          <span className="text-zinc-200">{rec.details.duplicateCount}</span>
-                        </div>
-                      )}
-                      {rec.details.keyName && (
-                        <div className="flex justify-between">
-                          <span>Key Tag:</span>
-                          <span className="text-zinc-200">{rec.details.keyName}</span>
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  {/* 4. Expected Impact Section */}
-                  <div className="text-xs pt-2 border-t border-zinc-850/60">
-                    <span className="font-semibold text-zinc-400 block mb-1">Expected Impact</span>
-                    <div className="grid grid-cols-2 gap-2 text-[11px]">
-                      {Object.entries(detail.impacts).map(([key, val]) => (
-                        <div key={key} className="flex items-center gap-1.5 capitalize">
-                          <span className="text-zinc-500">{key}:</span>
-                          <span className="font-medium text-zinc-300">{val}</span>
-                        </div>
-                      ))}
-                    </div>
+                    {rec.type === 'unused_keys' ? (
+                      <a href="/providers" className="px-3 py-1.5 rounded border border-zinc-700 hover:bg-zinc-800 text-zinc-300 text-xs font-medium transition-colors">
+                        View Providers
+                      </a>
+                    ) : (
+                      <button 
+                        onClick={() => handleApply(rec._id)} 
+                        disabled={applyingId === rec._id} 
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded bg-primary hover:bg-primary-dark text-white font-medium text-xs transition-colors disabled:opacity-50"
+                      >
+                        {applyingId === rec._id ? <><Loader2 size={12} className="animate-spin" /> Applying...</> : 'Apply Fix'}
+                      </button>
+                    )}
                   </div>
                 </div>
-
-                {/* 5. Recommended Action Buttons */}
-                <div className="mt-6 pt-3 border-t border-zinc-850/60 flex justify-end">
-                  {rec.type === 'unused_keys' ? (
-                    <a
-                      href="/providers"
-                      className="inline-flex items-center gap-1.5 text-xs text-primary font-medium hover:underline"
-                    >
-                      Manage API Providers <ArrowRight size={13} />
-                    </a>
-                  ) : (
-                    <button
-                      onClick={() => handleApply(rec._id)}
-                      disabled={applyingId === rec._id}
-                      className="flex items-center gap-1.5 px-3 py-1.5 rounded bg-primary hover:bg-primary-dark text-white font-medium text-xs transition-all disabled:opacity-50"
-                    >
-                      {applyingId === rec._id ? (
-                        <>
-                          <Loader2 size={12} className="animate-spin" /> Applying...
-                        </>
-                      ) : (
-                        <>
-                          Apply Recommendation
-                        </>
-                      )}
-                    </button>
-                  )}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      ) : (
-        <div className="p-12 text-center rounded-xl border border-zinc-850 bg-zinc-900/20">
-          <Check className="mx-auto text-emerald-400 h-8 w-8 mb-3 bg-emerald-500/10 p-1.5 rounded-full border border-emerald-500/20" />
-          <h3 className="text-sm font-semibold text-zinc-200 mb-1">Everything looks healthy</h3>
-          <p className="text-xs text-zinc-500 leading-relaxed max-w-sm mx-auto">
-            Not enough usage data to make a recommendation. OptiAPI will surface performance recommendations when enough usage records are gathered.
-          </p>
-        </div>
-      )}
+              );
+            })}
+          </div>
+        ) : (
+          <div className="p-8 text-center rounded-xl border border-zinc-850 bg-zinc-900/20">
+            <Check className="mx-auto text-emerald-400 h-8 w-8 mb-3 bg-emerald-500/10 p-1.5 rounded-full border border-emerald-500/20" />
+            <h3 className="text-sm font-semibold text-zinc-200 mb-1">Everything looks healthy</h3>
+            <p className="text-xs text-zinc-500 leading-relaxed max-w-sm mx-auto">
+              Your configuration is fully optimized.
+            </p>
+          </div>
+        )}
+      </section>
 
     </div>
   );

@@ -119,7 +119,7 @@ const analyzeLogsAndOptimize = async (userId) => {
 
     // Rule 4: Unused Keys
     const activeProvidersInLogs = new Set(logs.map(l => l.provider));
-    const userKeys = await ProviderKey.find({ userId });
+    const userKeys = await ProviderKey.find({ userId, isActive: true });
     for (const key of userKeys) {
       if (!activeProvidersInLogs.has(key.provider)) {
         recommendations.push({
