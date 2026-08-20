@@ -176,8 +176,10 @@ async function searchSemanticCache(redisClient, userId, provider, endpoint, body
       const distance = parseFloat(doc.value.score);
       const similarity = 1 - distance;
 
-      logger.debug(`[DEBUG] Comparing:\nQuery: ${prompt}\nSimilarity: ${similarity}\nThreshold: ${threshold}`);
-
+     logger.info(
+  `[TRACE] KNN Results: ${results.total}, Redis distance: ${distance}, ` +
+  `Calculated similarity: ${similarity}, Threshold: ${threshold}`
+);
       if (similarity >= threshold) {
         logger.info(`Semantic Cache HIT: score ${similarity.toFixed(3)} (threshold ${threshold}) for query [${prompt}]`);
         return JSON.parse(doc.value.responseBody);

@@ -242,69 +242,29 @@ const OptimizationCenter = () => {
         <div className="h-64 bg-zinc-900 border border-zinc-850 rounded-2xl skeleton-shimmer" />
       ) : decision ? (
         decision.success && decision.decision ? (
-          <div className="bg-gradient-to-br from-primary/10 via-zinc-950 to-zinc-950 border border-primary/20 rounded-2xl p-6 shadow-glow-blue relative overflow-hidden">
-            <div className="absolute top-0 right-0 w-32 h-32 bg-primary/10 rounded-full blur-3xl -mr-10 -mt-10 pointer-events-none"></div>
+          <div className="bg-gradient-to-br from-emerald-500/10 via-zinc-950 to-zinc-950 border border-emerald-500/20 rounded-2xl p-6 shadow-glow-green relative overflow-hidden">
+            <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/10 rounded-full blur-3xl -mr-10 -mt-10 pointer-events-none"></div>
             
             <div className="flex justify-between items-center pb-4 border-b border-zinc-900">
               <div>
-                <span className="px-3 py-1 rounded-full text-xs font-bold bg-primary/25 text-primary-light border border-primary/35 uppercase tracking-wider">
+                <span className="px-3 py-1 rounded-full text-xs font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 uppercase tracking-wider">
                   ⭐ Optimization Recommendation
                 </span>
               </div>
               <div className="text-right">
                 <span className="text-xs text-zinc-500 block font-semibold uppercase">Recommendation Score</span>
-                <span className="text-3xl font-black text-primary-light">{decision.decision.score}</span>
+                <span className="text-3xl font-black text-emerald-400">{decision.decision.score}</span>
               </div>
             </div>
 
-            {/* 3-Step Flow Diagram */}
-            <div className="my-6 grid grid-cols-1 md:grid-cols-5 items-center gap-4 text-center">
-              {/* Step 1: Requested */}
-              <div className="flex flex-col items-center p-4 rounded-xl bg-zinc-900/40 border border-zinc-850/50">
-                <span className="text-xs font-bold text-zinc-500 uppercase tracking-wide mb-1">Requested</span>
-                <span className="text-sm font-bold text-zinc-300">
-                  {formatProvider(decision.requestedProvider) || 'OpenAI'}
-                </span>
-                <span className="text-xs text-zinc-500 font-mono mt-0.5">
-                  {decision.requestedModel || 'gpt-3.5-turbo'}
-                </span>
-              </div>
-
-              {/* Arrow */}
-              <div className="flex justify-center text-zinc-600">
-                <ArrowRight size={20} className="rotate-90 md:rotate-0" />
-              </div>
-
-              {/* Step 2: Recommended */}
-              <div className="flex flex-col items-center p-4 rounded-xl bg-primary/10 border border-primary/20 relative shadow-glow-blue">
-                <span className="text-xs font-bold text-primary-light uppercase tracking-wide mb-1">⭐ Recommended</span>
-                <span className="text-sm font-bold text-primary-light">
-                  {formatProvider(decision.decision.provider)}
-                </span>
-                <span className="text-xs text-primary/65 font-mono mt-0.5">
-                  {decision.decision.model}
-                </span>
-              </div>
-
-              {/* Arrow */}
-              <div className="flex justify-center text-zinc-600">
-                <ArrowRight size={20} className="rotate-90 md:rotate-0" />
-              </div>
-
-              {/* Step 3: Executed */}
-              <div className={`flex flex-col items-center p-4 rounded-xl border ${optimizationMode === 'automatic' ? 'bg-emerald-500/10 border-emerald-500/20' : 'bg-zinc-900/40 border-zinc-850/50'}`}>
-                <span className={`text-xs font-bold uppercase tracking-wide mb-1 ${optimizationMode === 'automatic' ? 'text-emerald-400' : 'text-zinc-500'}`}>Executed</span>
-                <span className="text-sm font-bold text-zinc-200">
-                  {optimizationMode === 'automatic'
-                    ? (formatProvider(decision.decision.provider) || 'Gemini')
-                    : (formatProvider(decision.requestedProvider) || 'OpenAI')}
-                </span>
-                <span className="text-xs text-zinc-500 font-mono mt-0.5">
-                  {optimizationMode === 'automatic'
-                    ? (decision.decision.model || 'gemini-3.6-flash')
-                    : (decision.requestedModel || 'gpt-3.5-turbo')}
-                </span>
-              </div>
+            {/* Recommended Highlight Card */}
+            <div className="my-8 flex flex-col items-center justify-center p-8 rounded-xl bg-emerald-500/10 border border-emerald-500/20 shadow-glow-green relative">
+              <span className="text-3xl font-bold text-emerald-400 tracking-tight mb-2">
+                {formatProvider(decision.decision.provider)}
+              </span>
+              <span className="text-lg text-emerald-400/70 font-mono">
+                {decision.decision.model}
+              </span>
             </div>
 
             {/* Explanation text */}
