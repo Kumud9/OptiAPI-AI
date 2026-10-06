@@ -3,6 +3,9 @@
   "version": "1.0.0",
   "description": "OptiAPI AI Backend - Cost Intelligence & Optimization Gateway",
   "main": "src/server.js",
+  "engines": {
+    "node": ">=22.19.0"
+  },
   "scripts": {
     "start": "node src/server.js",
     "dev": "nodemon src/server.js",
