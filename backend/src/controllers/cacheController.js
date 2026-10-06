@@ -2,6 +2,7 @@ const CacheRule = require('../models/CacheRule');
 const { getRedisClient } = require('../config/redis');
 const logger = require('../utils/logger');
 const { normalizeEndpoint } = require('../utils/pathNormalizer');
+const { deleteKeysByPattern } = require('../utils/redisUtils');
 
 /**
  * Cache Rules management and cache purging.
@@ -46,6 +47,10 @@ const createCacheRule = async (req, res) => {
       ttlSeconds: parseInt(ttlSeconds, 10)
     });
 
+    // Populate Redis cache for this rule
+    const { setCachedRule, invalidateCachedRule } = require('../services/cacheRuleService');
+    await setCachedRule(req.user._id, provider, formattedEndpoint, rule);
+
     logger.info(`Cache Rule created: [${provider}] ${formattedEndpoint} with TTL ${ttlSeconds}s`);
     return res.status(201).json({ success: true, data: rule });
   } catch (error) {
@@ -60,6 +65,18 @@ const deleteCacheRule = async (req, res) => {
     if (!rule) {
       return res.status(404).json({ success: false, error: 'Cache rule not found' });
     }
+
+    // Invalidate Redis cache rule entry
+    const { invalidateCachedRule } = require('../services/cacheRuleService');
+    await invalidateCachedRule(req.user._id, rule.provider, rule.endpoint);
+
+    // Invalidate exact and semantic cached responses for this rule
+    const redis = getRedisClient();
+    const userIdString = req.user._id.toString();
+    const normEndpoint = rule.endpoint.replace(/[^a-zA-Z0-9_]/g, '_').toLowerCase();
+    await deleteKeysByPattern(redis, `apicache:${userIdString}:${rule.provider.toLowerCase()}:${rule.endpoint.toLowerCase()}:*`, { batchSize: 100 });
+    await deleteKeysByPattern(redis, `apicache_semantic:${userIdString}:${rule.provider.toLowerCase()}:${normEndpoint}:*`, { batchSize: 100 });
+
     logger.info(`Cache Rule deleted: ${req.params.id}`);
     return res.status(200).json({ success: true, data: {} });
   } catch (error) {
@@ -69,49 +86,24 @@ const deleteCacheRule = async (req, res) => {
 };
 
 /**
- * Manually flushes all API cache records for the logged-in user from Redis.
+ * Manually flushes all API cache records (L1 exact and L2 semantic) for the logged-in user from Redis.
+ * Uses non-blocking cursor-based SCAN to delete matching keys in batches.
  */
 const clearUserCache = async (req, res) => {
   try {
     const redis = getRedisClient();
     const userIdString = req.user._id.toString();
     
-    // Pattern to look for user's keys
+    // Pattern to look for user's exact and semantic keys
     const matchPattern = `apicache:${userIdString}:*`;
+    const semanticPattern = `apicache_semantic:${userIdString}:*`;
     
-    // In our MockRedisClient, we can iterate key-value store, or if actual Redis, scan keys
-    let keysDeletedCount = 0;
-    
-    if (typeof redis.keys === 'function') {
-      // Mock client supports direct parsing or scans
-      const keys = await redis.keys(matchPattern);
-      if (keys && keys.length > 0) {
-        for (const k of keys) {
-          await redis.del(k);
-        }
-        keysDeletedCount = keys.length;
-      }
-    } else {
-      // Standard redis client v4 doesn't support 'keys' directly without multi-scan, but let's delete using keys or store iterator
-      if (redis.store) {
-        // Fallback for MockRedisClient
-        for (const k of redis.store.keys()) {
-          if (k.startsWith(`apicache:${userIdString}:`)) {
-            redis.store.delete(k);
-            keysDeletedCount++;
-          }
-        }
-      } else {
-        // For production redis client, scan keys
-        const keys = await redis.keys(matchPattern);
-        if (keys && keys.length > 0) {
-          await redis.del(keys);
-          keysDeletedCount = keys.length;
-        }
-      }
-    }
+    // Non-blocking batch deletion using cursor-based SCAN
+    const exactDeleted = await deleteKeysByPattern(redis, matchPattern, { batchSize: 100 });
+    const semanticDeleted = await deleteKeysByPattern(redis, semanticPattern, { batchSize: 100 });
+    const keysDeletedCount = exactDeleted + semanticDeleted;
 
-    logger.info(`Manual Cache Flush triggered for User ${userIdString}. Cleaned ${keysDeletedCount} items.`);
+    logger.info(`Manual Cache Flush triggered for User ${userIdString}. Cleaned ${keysDeletedCount} items (${exactDeleted} exact, ${semanticDeleted} semantic).`);
     return res.status(200).json({ success: true, message: `Successfully cleared ${keysDeletedCount} cache records.` });
   } catch (error) {
     logger.error(`Clear cache error: ${error.message}`);

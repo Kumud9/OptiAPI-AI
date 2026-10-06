@@ -4,7 +4,9 @@ const {
   getRecommendations,
   applyRecommendation,
   getSettings,
-  updateSettings
+  updateSettings,
+  runOptimization,
+  getActivePolicy
 } = require('../controllers/optimizationController');
 const { getTelemetryMetrics } = require('../controllers/telemetryController');
 const { getHistoricalMetrics } = require('../controllers/historicalDataController');
@@ -26,6 +28,11 @@ router.route('/recommendations/:id/apply')
 router.route('/settings')
   .get(getSettings)
   .post(updateSettings);
+
+router.get('/policy', getActivePolicy);
+
+// Trigger asynchronous AI optimization run
+router.post('/run', runOptimization);
 
 // Historical telemetry analysis: per-(provider, model, endpoint) metrics.
 // Read-only. No external API calls. No secrets exposed.

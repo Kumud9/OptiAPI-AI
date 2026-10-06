@@ -12,18 +12,14 @@ const redis = require(nodeModulesPath('redis'));
 const GATEWAY_URL = 'http://localhost:5000/api/v1/gateway';
 const API_KEY = 'opti_live_demo_api_key_2026_xYz';
 
-// Utility helper to clear user cache in Redis
+// Utility helper to clear user cache in Redis using SCAN
+const { deleteKeysByPattern } = require('../utils/redisUtils');
 async function flushRedisCache(userIdString) {
   const redisClient = redis.createClient({ url: 'redis://localhost:6379' });
   await redisClient.connect();
-  const keys = await redisClient.keys(`apicache:${userIdString}:*`);
-  if (keys.length > 0) {
-    await redisClient.del(keys);
-  }
-  const semanticKeys = await redisClient.keys(`apicache_semantic:${userIdString}:*`);
-  if (semanticKeys.length > 0) {
-    await redisClient.del(semanticKeys);
-  }
+  await deleteKeysByPattern(redisClient, `apicache:${userIdString}:*`);
+  await deleteKeysByPattern(redisClient, `apicache_semantic:${userIdString}:*`);
+  await deleteKeysByPattern(redisClient, `cacherule:${userIdString}:*`);
   await redisClient.quit();
 }
 

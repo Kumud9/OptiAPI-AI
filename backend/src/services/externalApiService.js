@@ -1,5 +1,31 @@
 const logger = require('../utils/logger');
 const ProviderKey = require('../models/ProviderKey');
+const { Agent } = require('undici');
+
+// Sensible connection pool configuration for upstream AI providers
+const DEFAULT_POOL_CONFIG = {
+  keepAliveTimeout: 60000, // 60s socket idle timeout
+  keepAliveMaxTimeout: 600000, // 10min maximum keep-alive duration
+  connections: 50, // Max concurrent sockets per host
+  pipelining: 1
+};
+
+// Reusable dedicated connection pool agents per provider
+const providerAgents = {
+  openai: new Agent(DEFAULT_POOL_CONFIG),
+  gemini: new Agent(DEFAULT_POOL_CONFIG),
+  anthropic: new Agent(DEFAULT_POOL_CONFIG)
+};
+
+/**
+ * Get reusable connection pool dispatcher for a provider
+ * @param {string} provider 
+ * @returns {Agent|null}
+ */
+function getProviderDispatcher(provider) {
+  const p = (provider || '').toLowerCase();
+  return providerAgents[p] || null;
+}
 
 class ProviderError extends Error {
   constructor(message, statusCode, errorClass, shouldRetry) {
@@ -24,6 +50,15 @@ function classifyAndSanitizeError(err, provider, providerKeyDoc) {
 
   let errorClass = 'unknown';
   let shouldRetry = true;
+
+  if (err.name === 'TimeoutError' || err.name === 'AbortError' || /timeout|timed out|abort/i.test(errorText)) {
+    statusCode = 504;
+    errorClass = 'timeout';
+    shouldRetry = true;
+    const cleanMessage = `Upstream provider ${provider} request timed out`;
+    logger.warn(`Classified timeout error for ${provider}: status=504, shouldRetry=true`);
+    return new ProviderError(cleanMessage, 504, errorClass, shouldRetry);
+  }
 
   if (statusCode === 400) {
     errorClass = 'permanent_request_error';
@@ -63,7 +98,10 @@ function classifyAndSanitizeError(err, provider, providerKeyDoc) {
   return new ProviderError(cleanMessage, statusCode, errorClass, shouldRetry);
 }
 
-const simulateApiCall = async (provider, endpoint, method, body = {}, headers = {}, userId = null, inputProvider = null) => {
+const DEFAULT_TIMEOUT_MS = parseInt(process.env.UPSTREAM_TIMEOUT_MS, 10) || 15000;
+
+const simulateApiCall = async (provider, endpoint, method, body = {}, headers = {}, userId = null, inputProvider = null, options = {}) => {
+  const timeoutMs = (typeof options === 'number' ? options : options?.timeoutMs) || DEFAULT_TIMEOUT_MS;
   const providerLower = provider.toLowerCase();
   const inputProvResolved = inputProvider || provider;
   const inputAdapter = require('../adapters').getAdapter(inputProvResolved);
@@ -136,14 +174,18 @@ const simulateApiCall = async (provider, endpoint, method, body = {}, headers = 
         try {
           if (providerLower === 'openai') {
             const url = `https://api.openai.com${finalEndpoint}`;
-            logger.info(`Routing gateway request to real OpenAI endpoint: ${finalEndpoint}`);
+            logger.info(`Routing gateway request to real OpenAI endpoint: ${finalEndpoint} (timeout: ${timeoutMs}ms)`);
+            const signal = AbortSignal.timeout(timeoutMs);
+            const dispatcher = options?.dispatcher || getProviderDispatcher('openai');
             const response = await fetch(url, {
               method,
               headers: {
                 'Content-Type': 'application/json',
                 'Authorization': `Bearer ${apiKey}`
               },
-              body: method !== 'GET' && method !== 'HEAD' ? JSON.stringify(finalBody) : undefined
+              body: method !== 'GET' && method !== 'HEAD' ? JSON.stringify(finalBody) : undefined,
+              signal,
+              dispatcher
             });
             const latency = Date.now() - startTime;
             if (!response.ok) {
@@ -162,11 +204,15 @@ const simulateApiCall = async (provider, endpoint, method, body = {}, headers = 
 
           if (providerLower === 'gemini') {
             const geminiUrl = `https://generativelanguage.googleapis.com${finalEndpoint}?key=${apiKey}`;
-            logger.info(`Routing gateway request to real Gemini endpoint: ${finalEndpoint}`);
+            logger.info(`Routing gateway request to real Gemini endpoint: ${finalEndpoint} (timeout: ${timeoutMs}ms)`);
+            const signal = AbortSignal.timeout(timeoutMs);
+            const dispatcher = options?.dispatcher || getProviderDispatcher('gemini');
             const response = await fetch(geminiUrl, {
               method,
               headers: { 'Content-Type': 'application/json' },
-              body: method !== 'GET' && method !== 'HEAD' ? JSON.stringify(finalBody) : undefined
+              body: method !== 'GET' && method !== 'HEAD' ? JSON.stringify(finalBody) : undefined,
+              signal,
+              dispatcher
             });
             const latency = Date.now() - startTime;
             if (!response.ok) {
@@ -186,7 +232,9 @@ const simulateApiCall = async (provider, endpoint, method, body = {}, headers = 
 
           if (providerLower === 'anthropic') {
             const url = `https://api.anthropic.com${finalEndpoint}`;
-            logger.info(`Routing gateway request to real Anthropic endpoint: ${finalEndpoint}`);
+            logger.info(`Routing gateway request to real Anthropic endpoint: ${finalEndpoint} (timeout: ${timeoutMs}ms)`);
+            const signal = AbortSignal.timeout(timeoutMs);
+            const dispatcher = options?.dispatcher || getProviderDispatcher('anthropic');
             const response = await fetch(url, {
               method,
               headers: {
@@ -194,7 +242,9 @@ const simulateApiCall = async (provider, endpoint, method, body = {}, headers = 
                 'x-api-key': apiKey,
                 'anthropic-version': '2023-06-01'
               },
-              body: method !== 'GET' && method !== 'HEAD' ? JSON.stringify(finalBody) : undefined
+              body: method !== 'GET' && method !== 'HEAD' ? JSON.stringify(finalBody) : undefined,
+              signal,
+              dispatcher
             });
             const latency = Date.now() - startTime;
             if (!response.ok) {
@@ -393,5 +443,8 @@ const simulateApiCall = async (provider, endpoint, method, body = {}, headers = 
 
 module.exports = {
   simulateApiCall,
-  classifyAndSanitizeError
+  classifyAndSanitizeError,
+  getProviderDispatcher,
+  providerAgents,
+  DEFAULT_POOL_CONFIG
 };

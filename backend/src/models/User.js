@@ -29,6 +29,26 @@ const UserSchema = new mongoose.Schema({
     enum: ['user', 'admin'],
     default: 'user'
   },
+  optimizationSettings: {
+    optimizationMode: {
+      type: String,
+      enum: ['recommendation', 'automatic'],
+      default: 'recommendation'
+    },
+    optimizationEnabled: {
+      type: Boolean,
+      default: true
+    },
+    defaultStrategy: {
+      type: String,
+      enum: ['balanced', 'cost', 'latency'],
+      default: 'balanced'
+    },
+    automaticRoutingAllowed: {
+      type: Boolean,
+      default: false
+    }
+  },
   createdAt: {
     type: Date,
     default: Date.now

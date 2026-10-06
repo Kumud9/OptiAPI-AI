@@ -11,6 +11,7 @@ const cacheRoutes = require('./routes/cacheRoutes');
 const analyticsRoutes = require('./routes/analyticsRoutes');
 const optimizationRoutes = require('./routes/optimizationRoutes');
 const adminRoutes = require('./routes/adminRoutes');
+const metricsRoutes = require('./routes/metricsRoutes');
 
 const helmet = require('helmet');
 
@@ -22,7 +23,7 @@ app.use(helmet());
 // Configure CORS origin policy using environment variables
 const allowedOrigins = process.env.ALLOWED_ORIGINS
   ? process.env.ALLOWED_ORIGINS.split(',').map(o => o.trim())
-  : ['http://localhost:5173', 'http://localhost:5000', 'http://127.0.0.1:5173'];
+  : ['http://localhost:5173', 'http://localhost:5174', 'http://localhost:5000', 'http://127.0.0.1:5173', 'http://127.0.0.1:5174'];
 
 app.use(cors({
   origin: (origin, callback) => {
@@ -37,13 +38,20 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization', 'x-api-key']
 }));
 
-// Body parser
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+// Body parser with explicit payload size limits
+const MAX_PAYLOAD_SIZE = process.env.MAX_REQUEST_SIZE || '2mb';
+app.use(express.json({ limit: MAX_PAYLOAD_SIZE }));
+app.use(express.urlencoded({ extended: true, limit: MAX_PAYLOAD_SIZE }));
 
-// Morgan request logging mapped into Winston
+// Morgan request logging mapped into Winston with sensitive header masking
 const morganStream = {
-  write: (message) => logger.info(message.trim())
+  write: (message) => {
+    const sanitized = message
+      .trim()
+      .replace(/(bearer\s+)[A-Za-z0-9\-._~+/]+=*/gi, '$1[REDACTED]')
+      .replace(/(x-api-key:\s*)[A-Za-z0-9\-_]+/gi, '$1[REDACTED]');
+    logger.info(sanitized);
+  }
 };
 app.use(morgan(process.env.NODE_ENV === 'development' ? 'dev' : 'combined', { stream: morganStream }));
 
@@ -55,6 +63,8 @@ app.use('/api/v1/cache', cacheRoutes);
 app.use('/api/v1/analytics', analyticsRoutes);
 app.use('/api/v1/optimization', optimizationRoutes);
 app.use('/api/v1/admin', adminRoutes);
+app.use('/api/metrics', metricsRoutes);
+app.use('/api/v1/metrics', metricsRoutes);
 
 // Health check endpoint
 app.get('/health', (req, res) => {
@@ -68,7 +78,16 @@ app.use((req, res, next) => {
 
 // Global Centralized Error Handling Middleware
 app.use((err, req, res, next) => {
-  logger.error(`Unhandle Exception caught: ${err.message}`, { stack: err.stack });
+  if (err.type === 'entity.too.large') {
+    logger.warn(`Request payload rejected: payload size exceeds maximum limit of ${MAX_PAYLOAD_SIZE}`);
+    return res.status(413).json({
+      success: false,
+      error: 'PayloadTooLarge',
+      message: `Request payload exceeds allowed limit of ${MAX_PAYLOAD_SIZE}`
+    });
+  }
+
+  logger.error(`Unhandled Exception caught: ${err.message}`, { stack: err.stack });
   
   res.status(err.status || 500).json({
     success: false,

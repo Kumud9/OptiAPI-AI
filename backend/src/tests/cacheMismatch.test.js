@@ -18,13 +18,11 @@ const ApiKey = require('../models/ApiKey');
 const CacheRule = require('../models/CacheRule');
 const { handleGatewayRequest } = require('../controllers/gatewayController');
 
+const { deleteKeysByPattern } = require('../utils/redisUtils');
 async function flushRedisCache(userIdString) {
   const redisClient = redis.createClient({ url: 'redis://localhost:6379' });
   await redisClient.connect();
-  const keys = await redisClient.keys(`apicache:${userIdString}:*`);
-  if (keys.length > 0) {
-    await redisClient.del(keys);
-  }
+  await deleteKeysByPattern(redisClient, `apicache:${userIdString}:*`);
   await redisClient.quit();
 }
 

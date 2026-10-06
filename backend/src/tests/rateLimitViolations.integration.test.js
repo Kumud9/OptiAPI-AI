@@ -130,8 +130,8 @@ test('BUG-1 Fix: rateLimitViolations Redis counter integration', async (t) => {
     if (redisClient && redisClient.isOpen) {
       await redisClient.del(`rl_violations:${testUserId}`);
       // Also clean up any ratelimit window keys created during the test
-      const keys = await redisClient.keys(`ratelimit:${TEST_KEY}:*`);
-      if (keys.length) await redisClient.del(keys);
+      const { deleteKeysByPattern } = require('../utils/redisUtils');
+      await deleteKeysByPattern(redisClient, `ratelimit:${TEST_KEY}:*`);
       await redisClient.quit();
     }
     if (mongoDb && testUserId) {

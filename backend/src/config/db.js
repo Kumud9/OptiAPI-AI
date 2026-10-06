@@ -370,4 +370,16 @@ const connectDB = async () => {
   }
 };
 
+const disconnectDB = async () => {
+  if (mongoose.connection && mongoose.connection.readyState !== 0) {
+    try {
+      await mongoose.disconnect();
+      logger.info('MongoDB disconnected gracefully.');
+    } catch (err) {
+      logger.warn(`Error disconnecting MongoDB: ${err.message}`);
+    }
+  }
+};
+
+connectDB.disconnectDB = disconnectDB;
 module.exports = connectDB;

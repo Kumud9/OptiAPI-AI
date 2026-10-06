@@ -135,8 +135,8 @@ test('Gateway Rate-Limiter Live Integration', async (t) => {
     await mongoose.disconnect();
 
     if (redisClient && redisClient.isOpen) {
-      const keys = await redisClient.keys(`ratelimit:${TEST_KEY}:*`);
-      if (keys.length > 0) await redisClient.del(keys);
+      const { deleteKeysByPattern } = require('../utils/redisUtils');
+      await deleteKeysByPattern(redisClient, `ratelimit:${TEST_KEY}:*`);
       await redisClient.quit();
     }
   });

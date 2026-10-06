@@ -46,6 +46,8 @@ const ProviderKeySchema = new mongoose.Schema({
   }
 });
 
+ProviderKeySchema.index({ userId: 1, provider: 1, isActive: 1 });
+
 // Pre-save hook to automatically encrypt the provider credential value
 ProviderKeySchema.pre('save', function (next) {
   if (!this.isModified('value')) return next();

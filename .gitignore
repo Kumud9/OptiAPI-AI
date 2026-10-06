@@ -17,6 +17,10 @@ yarn-error.log*
 logs/
 *.log
 
+# Binaries and benchmarks tools
+benchmarks/bin/
+*.exe
+
 # OS Metadata files
 .DS_Store
 Thumbs.db

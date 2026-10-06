@@ -93,12 +93,21 @@ const applyRecommendation = async (req, res) => {
       });
 
       if (!existingRule) {
-        await CacheRule.create({
+        const createdRule = await CacheRule.create({
           userId,
           provider: matchedProvider,
           endpoint: formattedEndpoint,
           ttlSeconds: 3600 // Auto-cache for 1 hour by default
         });
+
+        // Populate Redis cache for this new rule
+        try {
+          const { setCachedRule } = require('../services/cacheRuleService');
+          await setCachedRule(userId, matchedProvider, formattedEndpoint, createdRule);
+        } catch (ruleCacheErr) {
+          logger.warn(`Failed to cache new rule in Redis: ${ruleCacheErr.message}`);
+        }
+
         logger.info(`Automated cache configuration applied: [${matchedProvider}] ${formattedEndpoint} cached for 3600s`);
       }
     }
@@ -114,17 +123,41 @@ const applyRecommendation = async (req, res) => {
   }
 };
 
-let globalDefaultStrategy = 'balanced';
+const User = require('../models/User');
 
 const getSettings = async (req, res) => {
   try {
+    const userId = req.user ? req.user._id : null;
+    let userSettings = {};
+
+    if (userId) {
+      const user = await User.findById(userId);
+      if (user && user.optimizationSettings) {
+        userSettings = user.optimizationSettings;
+      }
+    }
+
+    const optimizationMode = userSettings.optimizationMode || process.env.OPTIMIZATION_MODE || 'recommendation';
+    const optimizationEnabled = userSettings.optimizationEnabled !== undefined
+      ? userSettings.optimizationEnabled
+      : (process.env.OPTIMIZATION_ENABLED === 'true');
+    const defaultStrategy = userSettings.defaultStrategy || 'balanced';
+    const automaticRoutingAllowed = userSettings.automaticRoutingAllowed !== undefined
+      ? userSettings.automaticRoutingAllowed
+      : (optimizationMode === 'automatic');
+
+    // Retrieve active AI routing policy from Redis
+    const { getRoutingPolicy } = require('../services/policyService');
+    const activePolicy = userId ? await getRoutingPolicy(userId) : null;
+
     return res.status(200).json({
       success: true,
       data: {
-        optimizationMode: process.env.OPTIMIZATION_MODE || 'recommendation',
-        optimizationEnabled: process.env.OPTIMIZATION_ENABLED === 'true',
-        defaultStrategy: globalDefaultStrategy,
-        automaticRoutingAllowed: process.env.OPTIMIZATION_MODE === 'automatic'
+        optimizationMode,
+        optimizationEnabled,
+        defaultStrategy,
+        automaticRoutingAllowed,
+        activePolicy: activePolicy || null
       }
     });
   } catch (error) {
@@ -133,32 +166,72 @@ const getSettings = async (req, res) => {
   }
 };
 
-const updateSettings = async (req, res) => {
-  const { optimizationMode, optimizationEnabled, defaultStrategy, automaticRoutingAllowed } = req.body;
+const getActivePolicy = async (req, res) => {
   try {
-    if (optimizationMode !== undefined) {
-      process.env.OPTIMIZATION_MODE = optimizationMode;
+    const userId = req.user ? req.user._id : req.userId;
+    if (!userId) {
+      return res.status(401).json({ success: false, error: 'Authentication required' });
     }
-    if (optimizationEnabled !== undefined) {
-      process.env.OPTIMIZATION_ENABLED = optimizationEnabled ? 'true' : 'false';
-    }
-    if (automaticRoutingAllowed !== undefined) {
-      process.env.OPTIMIZATION_MODE = automaticRoutingAllowed ? 'automatic' : 'recommendation';
-    }
-    if (defaultStrategy !== undefined) {
-      globalDefaultStrategy = defaultStrategy;
-    }
-
-    logger.info(`Global optimization settings updated: Mode=${process.env.OPTIMIZATION_MODE}, Enabled=${process.env.OPTIMIZATION_ENABLED}, Strategy=${globalDefaultStrategy}`);
-    
+    const { getRoutingPolicy } = require('../services/policyService');
+    const policy = await getRoutingPolicy(userId);
     return res.status(200).json({
       success: true,
-      message: 'Global settings updated successfully.',
+      data: policy || null
+    });
+  } catch (error) {
+    logger.error(`Get active policy error: ${error.message}`);
+    return res.status(500).json({ success: false, error: 'Failed to retrieve active policy' });
+  }
+};
+
+const updateSettings = async (req, res) => {
+  const { optimizationMode, optimizationEnabled, defaultStrategy, automaticRoutingAllowed } = req.body;
+  const userId = req.user ? req.user._id : null;
+
+  try {
+    if (!userId) {
+      return res.status(401).json({ success: false, error: 'Authentication required' });
+    }
+
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ success: false, error: 'User not found' });
+    }
+
+    if (!user.optimizationSettings) {
+      user.optimizationSettings = {};
+    }
+
+    if (optimizationMode !== undefined) {
+      user.optimizationSettings.optimizationMode = optimizationMode;
+    }
+    if (optimizationEnabled !== undefined) {
+      user.optimizationSettings.optimizationEnabled = Boolean(optimizationEnabled);
+    }
+    if (automaticRoutingAllowed !== undefined) {
+      user.optimizationSettings.automaticRoutingAllowed = Boolean(automaticRoutingAllowed);
+      if (automaticRoutingAllowed) {
+        user.optimizationSettings.optimizationMode = 'automatic';
+      } else if (optimizationMode === undefined) {
+        user.optimizationSettings.optimizationMode = 'recommendation';
+      }
+    }
+    if (defaultStrategy !== undefined) {
+      user.optimizationSettings.defaultStrategy = defaultStrategy;
+    }
+
+    await user.save();
+
+    logger.info(`User [${userId}] optimization settings updated: Mode=${user.optimizationSettings.optimizationMode}, Enabled=${user.optimizationSettings.optimizationEnabled}, Strategy=${user.optimizationSettings.defaultStrategy}`);
+
+    return res.status(200).json({
+      success: true,
+      message: 'Settings updated successfully.',
       data: {
-        optimizationMode: process.env.OPTIMIZATION_MODE || 'recommendation',
-        optimizationEnabled: process.env.OPTIMIZATION_ENABLED === 'true',
-        defaultStrategy: globalDefaultStrategy,
-        automaticRoutingAllowed: process.env.OPTIMIZATION_MODE === 'automatic'
+        optimizationMode: user.optimizationSettings.optimizationMode,
+        optimizationEnabled: user.optimizationSettings.optimizationEnabled,
+        defaultStrategy: user.optimizationSettings.defaultStrategy,
+        automaticRoutingAllowed: user.optimizationSettings.automaticRoutingAllowed
       }
     });
   } catch (error) {
@@ -167,9 +240,32 @@ const updateSettings = async (req, res) => {
   }
 };
 
+const { runAiOptimization } = require('../services/aiOptimizationService');
+
+const runOptimization = async (req, res) => {
+  const userId = req.user?._id || req.userId;
+  const { objective, windowHours } = req.body || {};
+
+  try {
+    const result = await runAiOptimization(userId, { objective, windowHours });
+    if (!result.success) {
+      const status = result.code === 'OPTIMIZATION_IN_PROGRESS'
+        ? 409
+        : (result.code === 'INSUFFICIENT_TELEMETRY' ? 400 : 422);
+      return res.status(status).json(result);
+    }
+    return res.status(200).json(result);
+  } catch (err) {
+    logger.error(`Optimization run controller error: ${err.message}`);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+};
+
 module.exports = {
   getRecommendations,
   applyRecommendation,
   getSettings,
-  updateSettings
+  updateSettings,
+  runOptimization,
+  getActivePolicy
 };

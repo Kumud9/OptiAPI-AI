@@ -51,6 +51,20 @@ const deleteApiKey = async (req, res) => {
     if (!apiKey) {
       return res.status(404).json({ success: false, error: 'API key not found' });
     }
+
+    // Invalidate Redis API key cache
+    try {
+      const { getRedisClient } = require('../config/redis');
+      const redis = getRedisClient();
+      if (redis && apiKey.key) {
+        const keyHash = crypto.createHash('sha256').update(apiKey.key).digest('hex');
+        await redis.del(`apikey:${keyHash}`);
+        await redis.del(`apikey:usage:${apiKey._id}`);
+      }
+    } catch (redisErr) {
+      logger.warn(`Failed to delete API key cache from Redis: ${redisErr.message}`);
+    }
+
     logger.info(`Gateway API Key deleted: ${req.params.id}`);
     return res.status(200).json({ success: true, data: {} });
   } catch (error) {

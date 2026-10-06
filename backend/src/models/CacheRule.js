@@ -33,5 +33,6 @@ const CacheRuleSchema = new mongoose.Schema({
 
 // Avoid duplicate cache rules for same user-provider-endpoint
 CacheRuleSchema.index({ userId: 1, provider: 1, endpoint: 1 }, { unique: true });
+CacheRuleSchema.index({ userId: 1, isActive: 1 });
 
 module.exports = mongoose.model('CacheRule', CacheRuleSchema);

@@ -114,7 +114,8 @@ async function main() {
   // 3. Port Conflict Pre-checks
   log('System', 'Performing pre-flight port availability checks...');
   const backendPortInUse = await isPortInUse(5000);
-  const frontendPortInUse = await isPortInUse(5173);
+  let frontendPort = 5173;
+  let frontendPortInUse = await isPortInUse(5173);
 
   if (backendPortInUse) {
     logError('Pre-flight', 'Port 5000 (Backend API Server) is already in use.');
@@ -122,12 +123,19 @@ async function main() {
     process.exit(1);
   }
   if (frontendPortInUse) {
-    logError('Pre-flight', 'Port 5173 (Frontend React Client) is already in use.');
-    console.log('Please terminate the process running on port 5173.');
-    process.exit(1);
+    log('Pre-flight', 'Port 5173 is currently occupied by another service. Checking fallback port 5174...', '33');
+    const port5174InUse = await isPortInUse(5174);
+    if (!port5174InUse) {
+      frontendPort = 5174;
+      log('Pre-flight', 'Port 5174 is available! Setting frontend port to 5174.', '32');
+    } else {
+      logError('Pre-flight', 'Both ports 5173 and 5174 are already in use.');
+      console.log('Please terminate conflicting processes.');
+      process.exit(1);
+    }
+  } else {
+    log('System', 'Ports 5000 and 5173 are free. Proceeding...');
   }
-
-  log('System', 'Ports 5000 and 5173 are free. Proceeding...');
 
   // 4. Spin up Docker Services
   log('System', 'Launching Docker containers for MongoDB, Redis, and RabbitMQ...');
@@ -211,14 +219,17 @@ async function main() {
   };
 
   const backendProc = runLocalService('npm', ['run', 'backend'], 'Backend', '34');
-  const frontendProc = runLocalService('npm', ['run', 'frontend'], 'Frontend', '36');
+  const frontendArgs = frontendPort === 5173
+    ? ['run', 'frontend']
+    : ['run', 'frontend', '--', '--port', String(frontendPort)];
+  const frontendProc = runLocalService('npm', frontendArgs, 'Frontend', '36');
 
   // Let servers initialize a bit before printing final access block
   setTimeout(() => {
     console.log('\n\x1b[32m================================================================');
     console.log('🚀 OPTIAPI AI SERVICES ARE RUNNING SUCCESSFULLY');
     console.log('================================================================\x1b[0m');
-    console.log('  \x1b[1mFrontend Console\x1b[0m:        http://localhost:5173');
+    console.log(`  \x1b[1mFrontend Console\x1b[0m:        http://localhost:${frontendPort}`);
     console.log('  \x1b[1mBackend API Server\x1b[0m:      http://localhost:5000');
     console.log('  \x1b[1mRabbitMQ Dashboard\x1b[0m:      http://localhost:15672 (guest/guest)');
     console.log('\x1b[32m================================================================\x1b[0m');

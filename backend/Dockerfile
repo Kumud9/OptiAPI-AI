@@ -1,4 +1,4 @@
-FROM node:18-alpine
+FROM node:20-slim
 
 WORKDIR /usr/src/app
 
@@ -11,3 +11,4 @@ COPY . .
 EXPOSE 5000
 
 CMD ["npm", "start"]
+

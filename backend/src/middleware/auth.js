@@ -40,6 +40,10 @@ const admin = (req, res, next) => {
     return res.status(403).json({ success: false, error: 'Forbidden, admin authorization required' });
   }
 };
+const { getRedisClient } = require('../config/redis');
+const crypto = require('crypto');
+
+const API_KEY_CACHE_TTL = 300; // 5 minutes TTL for validated keys
 
 /**
  * Middleware to authenticate API Gateway client requests using client API key header
@@ -60,26 +64,83 @@ const verifyGatewayKey = async (req, res, next) => {
     return res.status(401).json({ success: false, error: 'Gateway access denied, x-api-key header missing' });
   }
 
-  try {
-    const keyDoc = await ApiKey.findOne({ key: apiKey, isActive: true });
-    
-    if (!keyDoc) {
-      return res.status(401).json({ success: false, error: 'Gateway access denied, invalid or inactive API key' });
-    }
+  // Safe SHA-256 hash of API key for Redis cache key (never store plaintext key in Redis)
+  const keyHash = crypto.createHash('sha256').update(apiKey).digest('hex');
+  const redisCacheKey = `apikey:${keyHash}`;
 
-    // Attach details to request for downstream middlewares
-    req.gatewayKey = keyDoc;
-    req.userId = keyDoc.userId;
-    
-    // Asynchronously increment usage counter
-    keyDoc.usageCount += 1;
-    await keyDoc.save();
-    
-    next();
-  } catch (error) {
-    logger.error(`Gateway authentication middleware error: ${error.message}`);
-    return res.status(500).json({ success: false, error: 'Internal gateway authentication error' });
+  let redis = null;
+  try {
+    redis = getRedisClient();
+  } catch (err) {
+    logger.warn(`Redis client unavailable in verifyGatewayKey: ${err.message}`);
   }
+
+  let keyData = null;
+
+  // 1. Check Redis cache first
+  if (redis) {
+    try {
+      const cached = await redis.get(redisCacheKey);
+      if (cached) {
+        keyData = JSON.parse(cached);
+      }
+    } catch (redisErr) {
+      logger.warn(`Redis API key cache lookup failed: ${redisErr.message}. Falling back to MongoDB.`);
+    }
+  }
+
+  // 2. Cache miss: Query MongoDB
+  if (!keyData) {
+    try {
+      const keyDoc = await ApiKey.findOne({ key: apiKey, isActive: true });
+      if (!keyDoc) {
+        return res.status(401).json({ success: false, error: 'Gateway access denied, invalid or inactive API key' });
+      }
+
+      keyData = {
+        _id: keyDoc._id.toString(),
+        userId: keyDoc.userId.toString(),
+        name: keyDoc.name,
+        rateLimitRps: keyDoc.rateLimitRps || 10,
+        isActive: keyDoc.isActive
+      };
+
+      // Populate Redis cache with safe representation
+      if (redis) {
+        try {
+          await redis.setEx(redisCacheKey, API_KEY_CACHE_TTL, JSON.stringify(keyData));
+        } catch (cacheSetErr) {
+          logger.warn(`Failed to cache API key in Redis: ${cacheSetErr.message}`);
+        }
+      }
+    } catch (error) {
+      logger.error(`Gateway authentication MongoDB error: ${error.message}`);
+      return res.status(500).json({ success: false, error: 'Internal gateway authentication error' });
+    }
+  }
+
+  // 3. Attach details to request for downstream middleware (rate limiter, cache, gateway controller)
+  req.gatewayKey = {
+    _id: keyData._id,
+    userId: keyData.userId,
+    name: keyData.name,
+    key: apiKey,
+    rateLimitRps: keyData.rateLimitRps || 10
+  };
+  req.userId = keyData.userId;
+
+  // 4. Atomically increment usage counter in Redis (fire-and-forget, no synchronous MongoDB write)
+  if (redis) {
+    try {
+      redis.incr(`apikey:usage:${keyData._id}`).catch(incrErr => {
+        logger.warn(`Failed to increment API key usage counter in Redis: ${incrErr.message}`);
+      });
+    } catch (incrSyncErr) {
+      // Non-blocking
+    }
+  }
+
+  next();
 };
 
 module.exports = {

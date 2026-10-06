@@ -7,6 +7,7 @@ let redisClient = null;
 class MockRedisClient {
   constructor() {
     this.store = new Map();
+    this.expiry = new Map();
     logger.warn('--- REDIS CONFIGURATION: Running with In-Memory Mock Cache ---');
   }
 
@@ -25,15 +26,74 @@ class MockRedisClient {
 
   async setEx(key, ttl, value) {
     this.store.set(key, String(value));
-    setTimeout(() => {
+    this.expiry.set(key, Date.now() + ttl * 1000);
+    const timer = setTimeout(() => {
       this.store.delete(key);
+      this.expiry.delete(key);
     }, ttl * 1000);
+    if (timer && timer.unref) timer.unref();
     return Promise.resolve('OK');
   }
 
-  async del(key) {
-    const deleted = this.store.delete(key);
+  async del(keyOrKeys) {
+    if (Array.isArray(keyOrKeys)) {
+      let count = 0;
+      for (const k of keyOrKeys) {
+        this.expiry.delete(k);
+        if (this.store.delete(k)) count++;
+      }
+      return Promise.resolve(count);
+    }
+    this.expiry.delete(keyOrKeys);
+    const deleted = this.store.delete(keyOrKeys);
     return Promise.resolve(deleted ? 1 : 0);
+  }
+
+  async ttl(key) {
+    if (!this.store.has(key)) return Promise.resolve(-2);
+    const exp = this.expiry.get(key);
+    if (!exp) return Promise.resolve(-1);
+    const remaining = Math.max(0, Math.ceil((exp - Date.now()) / 1000));
+    return Promise.resolve(remaining);
+  }
+
+  async expire(key, seconds) {
+    if (!this.store.has(key)) return Promise.resolve(0);
+    this.expiry.set(key, Date.now() + seconds * 1000);
+    const timer = setTimeout(() => {
+      this.store.delete(key);
+      this.expiry.delete(key);
+    }, seconds * 1000);
+    if (timer && timer.unref) timer.unref();
+    return Promise.resolve(1);
+  }
+
+  async scan(cursor = '0', options = {}) {
+    const match = options.MATCH || options.match || '*';
+    const count = parseInt(options.COUNT || options.count || 10, 10);
+    const cursorNum = parseInt(cursor, 10) || 0;
+
+    const regex = new RegExp('^' + match.replace(/[.+?^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*') + '$');
+    const allMatching = Array.from(this.store.keys()).filter(k => regex.test(k));
+
+    const slice = allMatching.slice(cursorNum, cursorNum + count);
+    const nextCursor = (cursorNum + count < allMatching.length) ? String(cursorNum + count) : '0';
+
+    return Promise.resolve({
+      cursor: nextCursor,
+      keys: slice
+    });
+  }
+
+  async *scanIterator(options = {}) {
+    let cursor = '0';
+    do {
+      const result = await this.scan(cursor, options);
+      cursor = result.cursor;
+      for (const key of result.keys) {
+        yield key;
+      }
+    } while (cursor !== '0');
   }
 
   async incr(key) {
@@ -52,18 +112,56 @@ class MockRedisClient {
   }
 
   async eval(script, options = {}) {
-    const key = options.keys[0];
-    const ttl = parseInt(options.args[1], 10);
+    const key = options.keys ? options.keys[0] : null;
+    const rawArgs = options.arguments || options.args || [];
 
+    // Phase 3C: Atomic check-and-increment rate limiting script
+    if (script && (script.includes('current >= limit') || script.includes('ARGV[1]'))) {
+      const limit = parseInt(rawArgs[0], 10) || 100;
+      const ttl = parseInt(rawArgs[1], 10) || 60;
+
+      const currentValStr = this.store.get(key);
+      const current = currentValStr ? parseInt(currentValStr, 10) : 0;
+
+      let remainingTtl = ttl;
+      if (this.expiry.has(key)) {
+        remainingTtl = Math.max(0, Math.ceil((this.expiry.get(key) - Date.now()) / 1000));
+      }
+
+      if (current >= limit) {
+        return Promise.resolve([0, current, remainingTtl]);
+      }
+
+      const newVal = current + 1;
+      this.store.set(key, String(newVal));
+
+      if (newVal === 1 || !this.expiry.has(key)) {
+        this.expiry.set(key, Date.now() + ttl * 1000);
+        const timer = setTimeout(() => {
+          this.store.delete(key);
+          this.expiry.delete(key);
+        }, ttl * 1000);
+        if (timer && timer.unref) timer.unref();
+        remainingTtl = ttl;
+      }
+
+      return Promise.resolve([1, newVal, remainingTtl]);
+    }
+
+    // Default legacy behavior for middleware/rateLimiter.js
+    const ttl = parseInt(rawArgs[1], 10) || 2;
     const currentValStr = this.store.get(key);
     const currentVal = currentValStr ? parseInt(currentValStr, 10) : 0;
     const newVal = currentVal + 1;
     this.store.set(key, String(newVal));
 
     if (newVal === 1) {
-      setTimeout(() => {
+      this.expiry.set(key, Date.now() + ttl * 1000);
+      const timer = setTimeout(() => {
         this.store.delete(key);
+        this.expiry.delete(key);
       }, ttl * 1000);
+      if (timer && timer.unref) timer.unref();
     }
     return Promise.resolve(newVal);
   }
@@ -110,4 +208,15 @@ const getRedisClient = () => {
   return redisClient;
 };
 
-module.exports = { connectRedis, getRedisClient };
+const disconnectRedis = async () => {
+  if (redisClient && typeof redisClient.quit === 'function') {
+    try {
+      await redisClient.quit();
+      logger.info('Redis connection closed gracefully.');
+    } catch (err) {
+      logger.warn(`Error disconnecting Redis: ${err.message}`);
+    }
+  }
+};
+
+module.exports = { connectRedis, getRedisClient, disconnectRedis };

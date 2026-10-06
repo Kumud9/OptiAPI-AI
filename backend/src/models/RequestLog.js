@@ -148,5 +148,7 @@ const RequestLogSchema = new mongoose.Schema({
 // Compound indexes for analytics dashboard querying efficiency
 RequestLogSchema.index({ userId: 1, timestamp: -1 });
 RequestLogSchema.index({ userId: 1, provider: 1, timestamp: -1 });
+RequestLogSchema.index({ userId: 1, cacheStatus: 1, timestamp: -1 });
+RequestLogSchema.index({ timestamp: -1 });
 
 module.exports = mongoose.model('RequestLog', RequestLogSchema);

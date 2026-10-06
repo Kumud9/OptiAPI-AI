@@ -35,4 +35,7 @@ const ApiKeySchema = new mongoose.Schema({
   }
 });
 
+ApiKeySchema.index({ key: 1, isActive: 1 });
+ApiKeySchema.index({ userId: 1, isActive: 1 });
+
 module.exports = mongoose.model('ApiKey', ApiKeySchema);
